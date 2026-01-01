@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -10,6 +10,7 @@ import { ActivityIndicator, View, Text } from 'react-native';
 import { initializeAds } from './services/adService';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './config/firebase';
+import * as Notifications from 'expo-notifications';
 
 // Gestionnaire d'erreurs global
 ErrorUtils.setGlobalHandler((error, isFatal) => {
@@ -47,11 +48,37 @@ export default function App() {
 
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(null);
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   // Initialiser les publicités au démarrage (désactivé temporairement)
   // useEffect(() => {
   //   initializeAds();
   // }, []);
+
+  // Configurer les listeners de notifications
+  useEffect(() => {
+    console.log('🔔 App: Configuration des listeners de notifications');
+
+    // Écouter les notifications reçues en premier plan
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📬 App: Notification reçue!', notification);
+    });
+
+    // Écouter les interactions avec les notifications
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('👆 App: Notification cliquée!', response);
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, []);
 
   // Écouter les changements d'état d'authentification
   useEffect(() => {
