@@ -9,6 +9,7 @@ import { lignes } from '../data/lignes';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getCurrentUser } from '../services/authService';
+import { registerForPushNotifications } from '../services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 
 // Composant de titre personnalisé pour la page d'accueil
@@ -90,6 +91,7 @@ export default function HomePage({ navigation }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userCities, setUserCities] = useState(['Paris']); // Villes sélectionnées par l'utilisateur
+  const scrollViewRef = useRef(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -102,6 +104,14 @@ export default function HomePage({ navigation }) {
   const linesAnim = useRef(new Animated.Value(0)).current;
   const topPostAnim = useRef(new Animated.Value(0)).current;
   const emptyStateBounce = useRef(new Animated.Value(0)).current;
+
+  // Enregistrer le token FCM pour les notifications push au démarrage
+  useEffect(() => {
+    if (currentUser) {
+      console.log('📱 Enregistrement du token FCM pour l\'utilisateur:', currentUser.uid);
+      registerForPushNotifications(currentUser.uid);
+    }
+  }, [currentUser]);
 
   // Charger les villes sélectionnées par l'utilisateur (à chaque fois que la page est affichée)
   useFocusEffect(
@@ -125,6 +135,13 @@ export default function HomePage({ navigation }) {
 
       loadUserCities();
     }, [currentUser])
+  );
+
+  // Scroller vers le haut quand on arrive sur la page
+  useFocusEffect(
+    React.useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
   );
 
   // Charger les posts en temps réel
@@ -362,6 +379,7 @@ export default function HomePage({ navigation }) {
       </View> */}
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={{ paddingBottom: 100 }}
       >

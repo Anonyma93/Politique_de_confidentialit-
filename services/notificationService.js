@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 // Configuration des notifications
 Notifications.setNotificationHandler({
@@ -10,6 +12,36 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+// Créer les canaux de notification pour Android
+const setupNotificationChannels = async () => {
+  if (Platform.OS === 'android') {
+    // Canal pour les incidents
+    await Notifications.setNotificationChannelAsync('incidents', {
+      name: 'Incidents',
+      description: 'Notifications pour les nouveaux incidents signalés',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+
+    // Canal pour les commentaires
+    await Notifications.setNotificationChannelAsync('comments', {
+      name: 'Commentaires',
+      description: 'Notifications pour les nouveaux commentaires sur vos posts',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#4A90E2',
+    });
+
+    console.log('✅ Canaux de notification Android créés');
+  }
+};
+
+// Initialiser les canaux au démarrage
+setupNotificationChannels();
 
 // Demander les permissions de notification
 export const requestNotificationPermissions = async () => {
@@ -181,5 +213,58 @@ export const setBadgeCount = async (count) => {
   } catch (error) {
     console.error('Error setting badge count:', error);
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Obtenir et enregistrer le token FCM/APNs natif
+ * pour les notifications push Firebase Cloud Messaging
+ */
+export const registerForPushNotifications = async (userId) => {
+  try {
+    // Demander les permissions
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('❌ Permission refusée pour les notifications push');
+      return { success: false, error: 'Permission refusée' };
+    }
+
+    // Obtenir le token natif du device (APNs pour iOS, FCM pour Android)
+    const deviceToken = await Notifications.getDevicePushTokenAsync();
+    const token = deviceToken.data;
+
+    console.log('📱 Device Push Token Type:', deviceToken.type);
+    console.log('📱 Device Push Token:', token);
+
+    // Enregistrer le token dans Firestore
+    if (userId) {
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, {
+        fcmToken: token, // Token FCM/APNs natif
+        fcmTokenType: deviceToken.type, // 'ios' ou 'android'
+        notificationsEnabled: true,
+      }, { merge: true });
+
+      console.log('✅ Token FCM/APNs natif enregistré dans Firestore');
+    }
+
+    return {
+      success: true,
+      token: token,
+      tokenType: deviceToken.type,
+    };
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'enregistrement du token:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
   }
 };

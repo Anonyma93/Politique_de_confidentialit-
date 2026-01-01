@@ -72,7 +72,7 @@ export default function WalkthroughTooltip({
         <View style={styles.tooltipContent}>
           {/* En-tête */}
           <View style={styles.tooltipHeader}>
-            <View style={[styles.iconContainer, { backgroundColor: theme.colors.iconActive }]}>
+            <View style={[styles.iconContainer, { backgroundColor: '#007AFF' }]}>
               <Ionicons name="bulb" size={20} color="#fff" />
             </View>
             <Text
@@ -124,7 +124,7 @@ export default function WalkthroughTooltip({
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.nextButton, { backgroundColor: theme.colors.iconActive }]}
+              style={[styles.nextButton, { backgroundColor: '#007AFF' }]}
               onPress={handleNext}
             >
               <Text

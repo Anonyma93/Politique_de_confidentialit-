@@ -25,6 +25,7 @@ import { lignes } from '../data/lignes';
 import { getStationsByPreferredLines } from '../data/stations';
 import PremiumBadge from '../components/PremiumBadge';
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Grades et leurs seuils
 const GRADES_HIERARCHY = [
@@ -165,10 +166,19 @@ export default function ProfileScreen() {
   // État pour l'upload de la photo
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // Charger les données utilisateur
-  useEffect(() => {
-    loadUserData();
-  }, []);
+  // Charger les données utilisateur à chaque fois que l'écran est affiché
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUserData();
+    }, [])
+  );
+
+  // Scroller vers le haut quand on arrive sur la page
+  useFocusEffect(
+    React.useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // Mettre à jour les stations disponibles quand les lignes préférées changent
   useEffect(() => {
@@ -471,14 +481,20 @@ export default function ProfileScreen() {
 
               {/* Bouton pour changer la photo */}
               <TouchableOpacity
-                style={[styles.changePhotoButton, { backgroundColor: theme.colors.iconActive }]}
+                style={[
+                  styles.changePhotoButton,
+                  {
+                    backgroundColor: theme.name === 'dark' ? '#FFFFFF' : '#000000',
+                    borderColor: theme.name === 'dark' ? '#000000' : '#FFFFFF',
+                  }
+                ]}
                 onPress={handleChangePhoto}
                 disabled={uploadingPhoto}
               >
                 {uploadingPhoto ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.name === 'dark' ? '#000000' : '#FFFFFF'} />
                 ) : (
-                  <Ionicons name="camera" size={20} color="#fff" />
+                  <Ionicons name="camera" size={20} color={theme.name === 'dark' ? '#000000' : '#FFFFFF'} />
                 )}
               </TouchableOpacity>
 
@@ -1127,7 +1143,17 @@ export default function ProfileScreen() {
           <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
             {/* Header du modal */}
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  {
+                    color: theme.colors.text,
+                    fontSize: fontSize.sizes.subtitle,
+                  }
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
                 Hiérarchie des grades
               </Text>
               <TouchableOpacity
@@ -1306,7 +1332,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     borderWidth: 3,
-    borderColor: '#fff',
   },
   premiumBadgeContainer: {
     position: 'absolute',
@@ -1707,15 +1732,23 @@ fieldCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    gap: 12,
   },
   modalTitle: {
     fontFamily: 'Fredoka_600SemiBold',
+    flex: 1,
   },
   modalCloseButton: {
-    padding: 5,
+    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pyramidContainer: {
     padding: 15,

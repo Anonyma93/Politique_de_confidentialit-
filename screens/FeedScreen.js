@@ -23,9 +23,10 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arr
 import { db } from '../config/firebase';
 import { setBadgeCount } from '../services/notificationService';
 import PremiumBadge from '../components/PremiumBadge';
+import CommentsModal from '../components/CommentsModal';
 
 // Composant de post animé
-const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, getSeverityColor, navigation, showDetailsTooltip = false }) => {
+const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfirm, onOpenComments, getSeverityColor, navigation, showDetailsTooltip = false }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -64,6 +65,7 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, getSever
 
   const ligne = lignes.find(l => l.value === post.line);
   const hasLiked = post.likedBy?.includes(currentUser?.uid);
+  const hasConfirmed = post.confirmedBy?.includes(currentUser?.uid);
   const isOwnPost = post.userId === currentUser?.uid;
   const severityColor = getSeverityColor(post.severity, post.postType);
 
@@ -129,21 +131,38 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, getSever
           </View>
         )}
 
-        {/* Bouton like en haut à droite */}
-        <TouchableOpacity
-          style={[styles.likeButtonTopRight, { backgroundColor: theme.colors.navbar }]}
-          onPress={() => onLike(post)}
-          disabled={isOwnPost}
-        >
-          <Ionicons
-            name={hasLiked ? "heart" : "heart-outline"}
-            size={20}
-            color={hasLiked ? "#FF6B9D" : theme.colors.iconInactive}
-          />
-          <Text style={[styles.likeCount, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-            {post.likesCount || 0}
-          </Text>
-        </TouchableOpacity>
+        {/* Boutons like et confirmer en haut à droite */}
+        <View style={styles.topRightButtons}>
+          <TouchableOpacity
+            style={[styles.actionButtonTopRight, { backgroundColor: theme.colors.navbar }]}
+            onPress={() => onLike(post)}
+            disabled={isOwnPost}
+          >
+            <Ionicons
+              name={hasLiked || isOwnPost ? "heart" : "heart-outline"}
+              size={20}
+              color={hasLiked || isOwnPost ? "#FF6B9D" : theme.colors.iconInactive}
+            />
+            <Text style={[styles.actionCount, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              {post.likesCount || 0}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButtonTopRight, { backgroundColor: theme.colors.navbar }]}
+            onPress={() => onConfirm(post)}
+            disabled={isOwnPost}
+          >
+            <Ionicons
+              name={hasConfirmed || isOwnPost ? "checkmark-circle" : "checkmark-circle-outline"}
+              size={20}
+              color={hasConfirmed || isOwnPost ? "#4CAF50" : theme.colors.iconInactive}
+            />
+            <Text style={[styles.actionCount, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              {post.confirmationsCount || 0}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Header du post */}
         <View style={styles.postHeader}>
@@ -264,6 +283,17 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, getSever
               <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
                 {formatDate(post.createdAt)}
               </Text>
+
+              {/* Bouton commentaires */}
+              <TouchableOpacity
+                style={[styles.commentsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                onPress={() => onOpenComments(post)}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color={theme.colors.iconActive} />
+                <Text style={[styles.commentsButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+                  {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
+                </Text>
+              </TouchableOpacity>
             </View>
           </WalkthroughTooltip>
         ) : (
@@ -281,6 +311,17 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, getSever
             <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
               {formatDate(post.createdAt)}
             </Text>
+
+            {/* Bouton commentaires */}
+            <TouchableOpacity
+              style={[styles.commentsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+              onPress={() => onOpenComments(post)}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color={theme.colors.iconActive} />
+              <Text style={[styles.commentsButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+                {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -294,6 +335,11 @@ export default function FeedScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const currentUser = getCurrentUser();
+  const flatListRef = useRef(null);
+
+  // État pour le modal des commentaires
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
 
   // Filtres (sélection multiple)
   const [selectedLines, setSelectedLines] = useState([]);
@@ -322,27 +368,37 @@ export default function FeedScreen({ navigation }) {
     { value: 'interrompu', label: 'Interrompu', color: '#BE1313' },
   ];
 
-  // Charger les préférences utilisateur
-  useEffect(() => {
-    const loadUserPreferences = async () => {
-      if (currentUser) {
-        const result = await getUserData(currentUser.uid);
-        if (result.success) {
-          setUserPreferredLines(result.data.preferredLines || []);
-          setUserPreferredStations(result.data.preferredStations || []);
-          // Charger les villes sélectionnées (array) ou city (string pour rétro-compatibilité)
-          const cities = result.data.cities || (result.data.city ? [result.data.city] : ['Paris']);
-          setUserCities(cities);
+  // Charger les préférences utilisateur (à chaque fois que la page est affichée)
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadUserPreferences = async () => {
+        if (currentUser) {
+          const result = await getUserData(currentUser.uid);
+          if (result.success) {
+            setUserPreferredLines(result.data.preferredLines || []);
+            setUserPreferredStations(result.data.preferredStations || []);
+            // Charger les villes sélectionnées (array) ou city (string pour rétro-compatibilité)
+            const cities = result.data.cities || (result.data.city ? [result.data.city] : ['Paris']);
+            console.log('🏙️ Villes chargées dans FeedScreen:', cities);
+            setUserCities(cities);
+          }
         }
-      }
-    };
-    loadUserPreferences();
-  }, [currentUser]);
+      };
+      loadUserPreferences();
+    }, [currentUser])
+  );
 
   // Reset le badge count quand l'utilisateur arrive sur la page Feed
   useFocusEffect(
     React.useCallback(() => {
       setBadgeCount(0);
+    }, [])
+  );
+
+  // Scroller vers le haut quand on arrive sur la page
+  useFocusEffect(
+    React.useCallback(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     }, [])
   );
 
@@ -410,6 +466,47 @@ export default function FeedScreen({ navigation }) {
     } catch (error) {
       console.error('Erreur lors du like:', error);
     }
+  };
+
+  // Gérer la confirmation/déconfirmation d'incident
+  const handleConfirm = async (post) => {
+    if (!currentUser) return;
+
+    // Empêcher de confirmer son propre post
+    if (post.userId === currentUser.uid) return;
+
+    const postRef = doc(db, 'posts', post.id);
+    const hasConfirmed = post.confirmedBy?.includes(currentUser.uid);
+
+    try {
+      if (hasConfirmed) {
+        // Retirer la confirmation
+        await updateDoc(postRef, {
+          confirmationsCount: Math.max(0, (post.confirmationsCount || 0) - 1),
+          confirmedBy: arrayRemove(currentUser.uid),
+        });
+      } else {
+        // Confirmer
+        await updateDoc(postRef, {
+          confirmationsCount: (post.confirmationsCount || 0) + 1,
+          confirmedBy: arrayUnion(currentUser.uid),
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la confirmation:', error);
+    }
+  };
+
+  // Ouvrir le modal des commentaires
+  const handleOpenComments = (post) => {
+    setSelectedPost(post);
+    setCommentsModalVisible(true);
+  };
+
+  // Fermer le modal des commentaires
+  const handleCloseComments = () => {
+    setCommentsModalVisible(false);
+    setSelectedPost(null);
   };
 
   // Gestionnaires de filtres rapides
@@ -565,6 +662,8 @@ export default function FeedScreen({ navigation }) {
         fontSize={fontSize}
         currentUser={currentUser}
         onLike={handleLike}
+        onConfirm={handleConfirm}
+        onOpenComments={handleOpenComments}
         getSeverityColor={getSeverityColor}
         navigation={navigation}
         showDetailsTooltip={index === 0}
@@ -1031,6 +1130,7 @@ export default function FeedScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={filteredPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item.id}
@@ -1044,6 +1144,13 @@ export default function FeedScreen({ navigation }) {
           }
         />
       )}
+
+      {/* Modal des commentaires */}
+      <CommentsModal
+        visible={commentsModalVisible}
+        onClose={handleCloseComments}
+        post={selectedPost}
+      />
     </View>
   );
 }
@@ -1256,12 +1363,50 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_400Regular',
     lineHeight: 20,
   },
+  commentsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  commentsButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   likeCount: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  topRightButtons: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'column',
+    gap: 8,
+    zIndex: 1,
+  },
+  actionButtonTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  actionCount: {
     fontFamily: 'Fredoka_600SemiBold',
   },
   likeButtonTopRight: {

@@ -21,6 +21,7 @@ import { lignes, trainDirections, stations, incidents } from '../data/lignes';
 import { incrementPostsCount, getCurrentUser } from '../services/authService';
 import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // import { showInterstitialAd } from '../services/adService';
 
 export default function PostScreen({ navigation }) {
@@ -76,7 +77,46 @@ export default function PostScreen({ navigation }) {
         }
       };
 
+      const checkCityChange = async () => {
+        try {
+          // Récupérer le timestamp du changement de ville
+          const cityChangedTimestamp = await AsyncStorage.getItem('cityChangedTimestamp');
+
+          // Récupérer le timestamp de la dernière vérification
+          const lastCheckedTimestamp = await AsyncStorage.getItem('lastCityCheckTimestamp');
+
+          // Si la ville a changé depuis la dernière vérification, réinitialiser le formulaire
+          if (cityChangedTimestamp && (!lastCheckedTimestamp || cityChangedTimestamp > lastCheckedTimestamp)) {
+            console.log('🔄 Changement de ville détecté, réinitialisation du formulaire');
+
+            // Réinitialiser tous les champs du formulaire
+            setSelectedLine(null);
+            setSelectedDirection(null);
+            setSelectedStation(null);
+            setSelectedIncident(null);
+            setSelectedSeverity(null);
+            setComment('');
+
+            // Scroller vers le haut
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          }
+
+          // Mettre à jour le timestamp de la dernière vérification
+          await AsyncStorage.setItem('lastCityCheckTimestamp', Date.now().toString());
+        } catch (error) {
+          console.error('❌ Erreur lors de la vérification du changement de ville:', error);
+        }
+      };
+
       loadUserCities();
+      checkCityChange();
+    }, [])
+  );
+
+  // Scroller vers le haut quand on arrive sur la page
+  useFocusEffect(
+    React.useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     }, [])
   );
 
@@ -278,6 +318,9 @@ export default function PostScreen({ navigation }) {
         comment: comment.trim(),
         likesCount: 0,
         likedBy: [], // Liste des UIDs qui ont liké
+        commentsCount: 0, // Compteur de commentaires
+        confirmationsCount: 0, // Compteur de confirmations
+        confirmedBy: [], // Liste des UIDs qui ont confirmé
         createdAt: new Date().toISOString(),
       };
 
@@ -744,7 +787,7 @@ export default function PostScreen({ navigation }) {
             style={[
               styles.publishButton,
               {
-                backgroundColor: theme.colors.iconActive,
+                backgroundColor: '#007AFF',
                 opacity: loading ? 0.6 : 1,
               }
             ]}

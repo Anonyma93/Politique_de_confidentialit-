@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lini",
     "slug": "Lini",
-    "version": "1.0.6",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -21,6 +21,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.anonyma93.Lini",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "aps-environment": "production"
       }
@@ -36,7 +37,7 @@
       ]
     },
     "notification": {
-      "icon": "./assets/notification-icon.png",
+      "icon": "./assets/logo.png",
       "color": "#000000",
       "androidMode": "default",
       "androidCollapsedTitle": "Incidents Lini"
@@ -49,7 +50,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
+          "icon": "./assets/logo.png",
           "color": "#ffffff",
           "sounds": []
         }

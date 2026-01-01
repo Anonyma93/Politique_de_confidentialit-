@@ -198,7 +198,7 @@ export default function PremiumScreen({ navigation }) {
         {/* Prix et abonnement */}
         {!subscriptionStatus?.isSubscribed && (
           <View style={styles.section}>
-            <View style={[styles.priceCard, { backgroundColor: theme.colors.iconActive }]}>
+            <View style={[styles.priceCard, { backgroundColor: '#5DD6A0' }]}>
               <Text style={[styles.priceAmount, { fontSize: fontSize.sizes.title }]}>
                 0,99€
               </Text>
@@ -211,7 +211,7 @@ export default function PremiumScreen({ navigation }) {
             </View>
 
             <TouchableOpacity
-              style={[styles.subscribeButton, { backgroundColor: theme.colors.text }]}
+              style={[styles.subscribeButton, { backgroundColor: '#007AFF' }]}
               onPress={handlePurchase}
               disabled={purchasing}
             >

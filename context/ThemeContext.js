@@ -3,22 +3,26 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ThemeContext = createContext();
 
-export const themes = {
-  light: {
-    name: 'light',
-    label: 'Clair',
-    colors: {
-      primary: '#E0E0E0',
-      background: '#FFFFFF',
-      text: '#000000',
-      textSecondary: '#666666',
-      navbar: '#FFFFFF',
-      border: '#E0E0E0',
-      iconActive: '#000000',
-      iconInactive: '#999999',
-      cardBackgroundColor: '#F5F5F5',
-    },
+// Fonction pour créer un thème personnalisé avec une couleur primary
+const createCustomTheme = (primaryColor = '#C9F2DF') => ({
+  name: 'custom',
+  label: 'Personnalisé',
+  colors: {
+    primary: primaryColor,
+    background: '#F2F2F7',
+    text: '#000000',
+    textSecondary: '#666666',
+    navbar: '#FFFFFF',
+    post: 'white',
+    border: '#E0E0E0',
+    iconActive: '#000000',
+    iconInactive: '#40010D',
+    cardBackgroundColor: '#252525ff'
   },
+});
+
+export const themes = {
+  custom: createCustomTheme('#C9F2DF'), // Couleur par défaut
   normal: {
     name: 'normal',
     label: 'Normal',
@@ -91,6 +95,7 @@ export const fontSizes = {
 export const ThemeProvider = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState(themes.normal);
   const [currentFontSize, setCurrentFontSize] = useState(fontSizes.normal);
+  const [customColor, setCustomColorState] = useState('#C9F2DF');
   const [isLoading, setIsLoading] = useState(true);
 
   // Charger le thème et la taille de police sauvegardés au démarrage
@@ -100,12 +105,20 @@ export const ThemeProvider = ({ children }) => {
 
   const loadSettings = async () => {
     try {
-      const [savedTheme, savedFontSize] = await Promise.all([
+      const [savedTheme, savedFontSize, savedCustomColor] = await Promise.all([
         AsyncStorage.getItem('appTheme'),
         AsyncStorage.getItem('appFontSize'),
+        AsyncStorage.getItem('customPrimaryColor'),
       ]);
 
-      if (savedTheme && themes[savedTheme]) {
+      // Charger la couleur personnalisée
+      const colorToUse = savedCustomColor || '#C9F2DF';
+      setCustomColorState(colorToUse);
+
+      // Charger le thème avec la couleur personnalisée si c'est le thème custom
+      if (savedTheme === 'custom') {
+        setCurrentTheme(createCustomTheme(colorToUse));
+      } else if (savedTheme && themes[savedTheme]) {
         setCurrentTheme(themes[savedTheme]);
       }
 
@@ -121,12 +134,28 @@ export const ThemeProvider = ({ children }) => {
 
   const changeTheme = async (themeName) => {
     try {
-      if (themes[themeName]) {
+      if (themeName === 'custom') {
+        setCurrentTheme(createCustomTheme(customColor));
+        await AsyncStorage.setItem('appTheme', themeName);
+      } else if (themes[themeName]) {
         setCurrentTheme(themes[themeName]);
         await AsyncStorage.setItem('appTheme', themeName);
       }
     } catch (error) {
       console.error('Erreur lors de la sauvegarde du thème:', error);
+    }
+  };
+
+  const setCustomColor = async (color) => {
+    try {
+      setCustomColorState(color);
+      await AsyncStorage.setItem('customPrimaryColor', color);
+      // Si le thème custom est actif, le mettre à jour immédiatement
+      if (currentTheme.name === 'custom') {
+        setCurrentTheme(createCustomTheme(color));
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de la couleur personnalisée:', error);
     }
   };
 
@@ -147,6 +176,8 @@ export const ThemeProvider = ({ children }) => {
       changeTheme,
       fontSize: currentFontSize,
       changeFontSize,
+      customColor,
+      setCustomColor,
       isLoading
     }}>
       {children}

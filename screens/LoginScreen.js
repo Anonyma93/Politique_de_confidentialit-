@@ -16,6 +16,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { signIn, signInWithApple, isAppleAuthAvailable } from '../services/authService';
+import { registerForPushNotifications } from '../services/notificationService';
 // import { showInterstitialAd } from '../services/adService';
 
 
@@ -41,6 +42,7 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Valeurs animées
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -132,6 +134,9 @@ export default function LoginScreen({ navigation }) {
     setLoading(false);
 
     if (result.success) {
+      // Enregistrer le token FCM pour les notifications push
+      await registerForPushNotifications(result.user.uid);
+
       // Afficher une publicité pour les utilisateurs non-premium
       // await showInterstitialAd(result.user.uid);
 
@@ -147,6 +152,9 @@ export default function LoginScreen({ navigation }) {
     setLoading(false);
 
     if (result.success) {
+      // Enregistrer le token FCM pour les notifications push
+      await registerForPushNotifications(result.user.uid);
+
       // Si c'est un nouvel utilisateur OU si le profil n'est pas complet
       // (pas de lignes/stations préférées), rediriger vers l'onboarding
       if (result.isNewUser || result.profileIncomplete) {
@@ -240,23 +248,36 @@ export default function LoginScreen({ navigation }) {
             autoCapitalize="none"
           />
 
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.navbar,
-                color: theme.colors.text,
-                borderColor: theme.colors.border,
-                fontSize: fontSize.sizes.body,
-                fontFamily: 'Fredoka_400Regular',
-              },
-            ]}
-            placeholder="Mot de passe"
-            placeholderTextColor={theme.colors.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={[
+                styles.input,
+                styles.passwordInput,
+                {
+                  backgroundColor: theme.colors.navbar,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                  fontSize: fontSize.sizes.body,
+                  fontFamily: 'Fredoka_400Regular',
+                },
+              ]}
+              placeholder="Mot de passe"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
+              <Ionicons
+                name={showPassword ? "eye-outline" : "eye-off-outline"}
+                size={22}
+                color={theme.colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
 
           {/* Boutons de connexion côte à côte */}
           <View style={styles.buttonsRow}>
@@ -379,6 +400,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 15,
     marginBottom: 15,
+  },
+  passwordContainer: {
+    width: '100%',
+    position: 'relative',
+    marginBottom: 15,
+  },
+  passwordInput: {
+    marginBottom: 0,
+    paddingRight: 50,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    padding: 5,
   },
   buttonsRow: {
     flexDirection: 'row',

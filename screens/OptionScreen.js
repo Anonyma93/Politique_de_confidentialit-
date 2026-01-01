@@ -11,9 +11,11 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme, fontSizes } from '../context/ThemeContext';
 import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
 import WalkthroughTooltip from '../components/WalkthroughTooltip';
@@ -23,20 +25,24 @@ import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { requestNotificationPermissions } from '../services/notificationService';
 import { LinearGradient } from 'expo-linear-gradient';
-import { activatePremiumForUser } from '../utils/activatePremiumDev';
+import { activatePremiumForUser, deactivatePremiumForUser } from '../utils/activatePremiumDev';
+import PremiumBadge from '../components/PremiumBadge';
 
 export default function OptionScreen() {
-  const { theme, changeTheme, fontSize, changeFontSize } = useTheme();
+  const { theme, changeTheme, fontSize, changeFontSize, customColor, setCustomColor } = useTheme();
   const { resetWalkthrough } = useWalkthrough();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const currentUser = getCurrentUser();
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [hexInput, setHexInput] = useState('');
 
   // Refs pour le scroll automatique vers les tooltips
   const scrollViewRef = useRef(null);
   const introRef = useRef(null);
   const themeRef = useRef(null);
   const notificationsRef = useRef(null);
+  const adminSectionRef = useRef(null);
 
   // États pour le modal de changement de mot de passe
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
@@ -55,11 +61,85 @@ export default function OptionScreen() {
   const [selectedCities, setSelectedCities] = useState(['Paris']);
   const [isPremium, setIsPremium] = useState(false);
 
-  const themeOptions = [
-    { key: 'light', icon: 'sunny', label: 'Clair' },
+  // États pour la section admin
+  const [userEmail, setUserEmail] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminEmailInput, setAdminEmailInput] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  // État pour le modal de déconnexion
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+
+  // Toutes les options de thème
+  const allThemeOptions = [
+    { key: 'custom', icon: 'color-palette', label: 'Custom', premiumOnly: true },
     { key: 'normal', icon: 'partly-sunny', label: 'Normal' },
     { key: 'dark', icon: 'moon', label: 'Sombre' },
   ];
+
+  // Palette de couleurs étendue (36 couleurs)
+  const colorPalette = [
+    // Pastels clairs
+    { color: '#C9F2DF', label: 'Menthe' },
+    { color: '#FFB3BA', label: 'Rose' },
+    { color: '#BAFFC9', label: 'Vert' },
+    { color: '#BAE1FF', label: 'Bleu' },
+    { color: '#FFFFBA', label: 'Jaune' },
+    { color: '#FFD4BA', label: 'Orange' },
+    { color: '#E0BBE4', label: 'Lavande' },
+    { color: '#FEC8D8', label: 'Rose pâle' },
+    { color: '#D4F1F4', label: 'Cyan' },
+    { color: '#FFE5B4', label: 'Pêche' },
+    { color: '#C7CEEA', label: 'Pervenche' },
+    { color: '#B5EAD7', label: 'Menthe claire' },
+    // Couleurs vives
+    { color: '#FF6B9D', label: 'Rose vif' },
+    { color: '#00D9FF', label: 'Cyan vif' },
+    { color: '#FFD93D', label: 'Jaune vif' },
+    { color: '#6BCB77', label: 'Vert vif' },
+    { color: '#FF6B6B', label: 'Rouge corail' },
+    { color: '#4D96FF', label: 'Bleu vif' },
+    { color: '#9D84B7', label: 'Violet' },
+    { color: '#FF9A8B', label: 'Saumon' },
+    { color: '#A8E6CF', label: 'Menthe foncé' },
+    { color: '#FFD1DC', label: 'Rose bonbon' },
+    { color: '#B4E7CE', label: 'Jade' },
+    { color: '#FFDAC1', label: 'Abricot' },
+    // Couleurs supplémentaires
+    { color: '#F3A683', label: 'Orange doux' },
+    { color: '#F7D794', label: 'Miel' },
+    { color: '#778BEB', label: 'Indigo' },
+    { color: '#E77F67', label: 'Terracotta' },
+    { color: '#CF6A87', label: 'Rose ancien' },
+    { color: '#F19066', label: 'Mandarine' },
+    { color: '#546DE5', label: 'Bleu roi' },
+    { color: '#C44569', label: 'Framboise' },
+    { color: '#786FA6', label: 'Mauve' },
+    { color: '#F8B500', label: 'Or' },
+    { color: '#63CDDA', label: 'Turquoise' },
+    { color: '#EE5A6F', label: 'Pastèque' },
+  ];
+
+  // Gestionnaire pour la sélection de couleur
+  const handleColorSelect = (color) => {
+    setCustomColor(color);
+    setShowColorPicker(false);
+  };
+
+  // Gestionnaire pour l'input hexadécimal
+  const handleHexSubmit = () => {
+    const hex = hexInput.trim();
+    // Validation du format hex (#RRGGBB)
+    const hexRegex = /^#([A-Fa-f0-9]{6})$/;
+
+    if (hexRegex.test(hex)) {
+      setCustomColor(hex);
+      setHexInput('');
+      setShowColorPicker(false);
+    } else {
+      Alert.alert('Format invalide', 'Veuillez entrer une couleur au format #RRGGBB (ex: #C9F2DF)');
+    }
+  };
 
   const fontSizeOptions = [
     { key: 'small', icon: 'text', label: 'Petit', iconSize: 20 },
@@ -92,7 +172,7 @@ export default function OptionScreen() {
     if (ref.current && scrollViewRef.current) {
       ref.current.measureLayout(
         scrollViewRef.current,
-        (x, y) => {
+        (_x, y) => {
           scrollViewRef.current.scrollTo({
             y: y - offset, // Offset pour que le tooltip soit bien visible
             animated: true,
@@ -136,8 +216,19 @@ export default function OptionScreen() {
           if (userDoc.exists()) {
             const userData = userDoc.data();
 
+            // Charger l'email et vérifier si admin
+            const email = userData.email || '';
+            setUserEmail(email);
+            setIsAdmin(email === 'quentinmichaud93460@hotmail.fr');
+
             // Charger le statut premium
-            setIsPremium(userData.isPremium || false);
+            const premiumStatus = userData.isPremium || false;
+            setIsPremium(premiumStatus);
+
+            // Si l'utilisateur n'est pas Premium et a le thème custom, basculer vers normal
+            if (!premiumStatus && theme.name === 'custom') {
+              changeTheme('normal');
+            }
 
             // Charger les villes (nouveau format tableau ou ancien format string)
             if (userData.cities && Array.isArray(userData.cities)) {
@@ -157,6 +248,13 @@ export default function OptionScreen() {
   useEffect(() => {
     loadPreferences();
   }, [currentUser]);
+
+  // Scroller vers le haut quand on arrive sur la page
+  useFocusEffect(
+    React.useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // Sauvegarder les préférences de notifications
   const saveNotificationPreferences = async (enabled, severities, days, start, end) => {
@@ -293,6 +391,9 @@ export default function OptionScreen() {
       setSelectedCities(newCities);
       console.log('🏙️ Nouvelles villes sélectionnées:', newCities);
 
+      // Marquer le changement de ville pour réinitialiser le formulaire de post
+      await AsyncStorage.setItem('cityChangedTimestamp', Date.now().toString());
+
       // Sauvegarder dans Firestore
       if (currentUser) {
         const userRef = doc(db, 'users', currentUser.uid);
@@ -308,65 +409,62 @@ export default function OptionScreen() {
     }
   };
 
-  // TEMPORAIRE : Activer le premium pour le compte de développement
-  const handleActivatePremiumDev = async () => {
-    setLoading(true);
-    const result = await activatePremiumForUser('quentinmichaud93460@hotmail.fr');
-    setLoading(false);
-
-    if (result.success) {
-      Alert.alert('Succès', 'Premium activé de façon permanente ! Veuillez vous reconnecter pour voir les changements.', [
-        { text: 'OK', onPress: () => {
-          // Recharger les données de l'utilisateur
-          loadPreferences();
-        }}
-      ]);
-    } else {
-      Alert.alert('Erreur', result.error || 'Impossible d\'activer le premium');
+  // ADMIN : Activer le premium pour un utilisateur par email
+  const handleAdminActivatePremium = async () => {
+    if (!adminEmailInput.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer une adresse email');
+      return;
     }
+
+    Alert.alert(
+      'Activer Premium',
+      `Voulez-vous activer le statut Premium pour l'utilisateur avec l'email ${adminEmailInput.trim()} ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Activer',
+          onPress: async () => {
+            setAdminLoading(true);
+            const result = await activatePremiumForUser(adminEmailInput.trim());
+            setAdminLoading(false);
+
+            if (result.success) {
+              setAdminEmailInput('');
+              Alert.alert('Succès', 'Premium activé avec succès !');
+            } else {
+              Alert.alert('Erreur', result.error || 'Impossible d\'activer le premium');
+            }
+          },
+        },
+      ]
+    );
   };
 
-  // TEMPORAIRE : Désactiver le premium (DEV ONLY)
-  const handleDeactivatePremiumDev = async () => {
-    if (!currentUser) {
-      Alert.alert('Erreur', 'Utilisateur non connecté');
+  // ADMIN : Désactiver le premium pour un utilisateur par email
+  const handleAdminDeactivatePremium = async () => {
+    if (!adminEmailInput.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer une adresse email');
       return;
     }
 
     Alert.alert(
       'Désactiver Premium',
-      'Voulez-vous désactiver le statut Premium pour ce compte ? Les villes seront limitées à une seule.',
+      `Voulez-vous désactiver le statut Premium pour l'utilisateur avec l'email ${adminEmailInput.trim()} ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Désactiver',
           style: 'destructive',
           onPress: async () => {
-            setLoading(true);
-            try {
-              const userRef = doc(db, 'users', currentUser.uid);
+            setAdminLoading(true);
+            const result = await deactivatePremiumForUser(adminEmailInput.trim());
+            setAdminLoading(false);
 
-              // Limiter à une seule ville (garder la première)
-              const singleCity = selectedCities.length > 0 ? [selectedCities[0]] : ['Paris'];
-
-              await updateDoc(userRef, {
-                isPremium: false,
-                premiumExpiresAt: null,
-                cities: singleCity,
-                city: singleCity[0],
-                updatedAt: new Date().toISOString(),
-              });
-
-              setLoading(false);
-              Alert.alert('Succès', `Premium désactivé ! Ville limitée à ${singleCity[0]}.`, [
-                { text: 'OK', onPress: () => {
-                  loadPreferences();
-                }}
-              ]);
-            } catch (error) {
-              setLoading(false);
-              console.error('Erreur lors de la désactivation du premium:', error);
-              Alert.alert('Erreur', 'Impossible de désactiver le premium');
+            if (result.success) {
+              setAdminEmailInput('');
+              Alert.alert('Succès', 'Premium désactivé avec succès !');
+            } else {
+              Alert.alert('Erreur', result.error || 'Impossible de désactiver le premium');
             }
           },
         },
@@ -397,32 +495,22 @@ export default function OptionScreen() {
   };
 
   // Gérer la déconnexion
-  const handleLogout = async () => {
-    Alert.alert(
-      'Déconnexion',
-      'Êtes-vous sûr de vouloir vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Déconnexion',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            const result = await logout();
-            setLoading(false);
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
 
-            if (result.success) {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } else {
-              Alert.alert('Erreur', result.error || 'Erreur lors de la déconnexion');
-            }
-          },
-        },
-      ]
-    );
+  // Confirmer la déconnexion
+  const confirmLogout = async () => {
+    setLogoutModalVisible(false);
+    setLoading(true);
+    const result = await logout();
+    setLoading(false);
+
+    if (!result.success) {
+      Alert.alert('Erreur', result.error || 'Erreur lors de la déconnexion');
+    }
+    // Si succès, onAuthStateChanged dans App.js gérera automatiquement
+    // la redirection vers l'écran de connexion
   };
 
   // Gérer le changement de mot de passe
@@ -511,7 +599,11 @@ export default function OptionScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       {/* Mesh Gradient Background */}
 {/*       <View style={styles.meshGradientContainer} pointerEvents="none">
         <LinearGradient
@@ -544,6 +636,7 @@ export default function OptionScreen() {
         ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={{ paddingBottom: 100 }}
+        keyboardShouldPersistTaps="handled"
       >
       {/* Titre de la page */}
       <View style={[styles.pageHeader, { backgroundColor: 'transparent' }]}>
@@ -588,8 +681,10 @@ export default function OptionScreen() {
         </WalkthroughTooltip>
 
         <View style={styles.modernThemeContainer}>
-          {themeOptions.map((option) => {
+          {allThemeOptions.map((option) => {
             const isSelected = theme.name === option.key;
+            const isLocked = option.premiumOnly && !isPremium;
+
             return (
               <TouchableOpacity
                 key={option.key}
@@ -597,22 +692,43 @@ export default function OptionScreen() {
                   styles.modernThemeCard,
                   {
                     backgroundColor: isSelected ? theme.colors.primary : theme.colors.post,
-                    borderColor: theme.colors.border,
+                    borderColor: isLocked ? '#FFD700' : theme.colors.border,
+                    opacity: isLocked ? 0.6 : 1,
                   }
                 ]}
-                onPress={() => changeTheme(option.key)}
-              >
-                <View style={[
-                  styles.modernThemeIconContainer,
-                  {
-                    backgroundColor: isSelected ? theme.colors.background : theme.colors.background,
+                onPress={() => {
+                  if (isLocked) {
+                    // Scroll vers la section Premium
+                    scrollViewRef.current?.scrollTo({
+                      y: 1200, // Position approximative de la section Premium
+                      animated: true,
+                    });
+                    return;
                   }
-                ]}>
-                  <Ionicons
-                    name={option.icon}
-                    size={28}
-                    color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
-                  />
+                  changeTheme(option.key);
+                  if (option.key === 'custom') {
+                    setShowColorPicker(true);
+                  }
+                }}
+                disabled={isLocked}
+              >
+                <View style={{ position: 'relative' }}>
+                  <View style={[
+                    styles.modernThemeIconContainer,
+                    {
+                      backgroundColor: isSelected ? theme.colors.background : theme.colors.background,
+                    }
+                  ]}>
+                    <Ionicons
+                      name={option.icon}
+                      size={28}
+                      color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
+                    />
+                  </View>
+                  {/* Badge Premium */}
+                  {isLocked && (
+                    <PremiumBadge size={24} style={styles.premiumBadge} />
+                  )}
                 </View>
                 <Text
                   style={[
@@ -625,7 +741,7 @@ export default function OptionScreen() {
                 >
                   {option.label}
                 </Text>
-                {isSelected && (
+                {isSelected && !isLocked && (
                   <View style={styles.modernCheckmarkContainer}>
                     <Ionicons
                       name="checkmark-circle"
@@ -638,6 +754,22 @@ export default function OptionScreen() {
             );
           })}
         </View>
+
+        {/* Bouton pour ouvrir le sélecteur de couleur */}
+        {theme.name === 'custom' && (
+          <View style={styles.colorPickerContainer}>
+            <TouchableOpacity
+              style={[styles.colorPickerButton, { backgroundColor: theme.colors.primary, borderColor: theme.colors.border }]}
+              onPress={() => setShowColorPicker(true)}
+            >
+              <View style={[styles.colorPreview, { backgroundColor: customColor }]} />
+              <Text style={[styles.colorPickerButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Personnaliser la couleur
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.iconActive} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -733,6 +865,7 @@ export default function OptionScreen() {
                   styles.cityIcon,
                   {
                     opacity: selectedCities.includes('Paris') ? 1 : 0.5,
+                    tintColor: theme.colors.iconActive,
                   }
                 ]}
                 resizeMode="contain"
@@ -782,6 +915,7 @@ export default function OptionScreen() {
                   styles.cityIcon,
                   {
                     opacity: selectedCities.includes('Lyon') ? 1 : 0.5,
+                    tintColor: theme.colors.iconActive,
                   }
                 ]}
                 resizeMode="contain"
@@ -809,40 +943,55 @@ export default function OptionScreen() {
             )}
           </TouchableOpacity>
 
-          <View
+          <TouchableOpacity
             style={[
               styles.modernThemeCard,
               {
-                backgroundColor: theme.colors.post,
+                backgroundColor: selectedCities.includes('Toulouse') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
-                opacity: 0.6,
               }
             ]}
+            onPress={() => handleCityChange('Toulouse')}
           >
             <View style={[
               styles.modernThemeIconContainer,
               {
-                backgroundColor: theme.colors.background,
+                backgroundColor: selectedCities.includes('Toulouse') ? theme.colors.background : theme.colors.background,
               }
             ]}>
-              <Ionicons
-                name="add-circle-outline"
-                size={32}
-                color={theme.colors.textSecondary}
+              <Image
+                source={require('../assets/toulouse.png')}
+                style={[
+                  styles.cityIcon,
+                  {
+                    opacity: selectedCities.includes('Toulouse') ? 1 : 0.5,
+                    tintColor: theme.colors.iconActive,
+                  }
+                ]}
+                resizeMode="contain"
               />
             </View>
             <Text
               style={[
                 styles.modernThemeLabel,
                 {
-                  color: theme.colors.textSecondary,
+                  color: selectedCities.includes('Toulouse') ? theme.colors.text : theme.colors.text,
                   fontSize: fontSize.sizes.body,
                 }
               ]}
             >
-              Bientôt
+              Toulouse
             </Text>
-          </View>
+            {selectedCities.includes('Toulouse') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -883,7 +1032,7 @@ export default function OptionScreen() {
           <Switch
             value={notificationsEnabled}
             onValueChange={handleNotificationsToggle}
-            trackColor={{ false: theme.colors.border, true: theme.colors.iconActive }}
+            trackColor={{ false: theme.colors.border, true: '#4CD964' }}
             thumbColor="#fff"
             style={{ alignSelf: 'center' }}
           />
@@ -1117,23 +1266,23 @@ export default function OptionScreen() {
         <TouchableOpacity
           style={[
             styles.accountOption,
-            { backgroundColor: theme.colors.iconActive, borderColor: '#E5E5E5' }
+            { backgroundColor: '#FFD700', borderColor: '#E5E5E5' }
           ]}
           onPress={() => navigation.navigate('Premium')}
         >
-          <View style={[styles.accountIconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.3)' }]}>
-            <Ionicons name="diamond" size={22} color="#fff" />
+          <View style={[styles.accountIconContainer, { backgroundColor: 'rgba(0, 0, 0, 0.15)' }]}>
+            <Ionicons name="diamond" size={22} color="#000" />
           </View>
           <View style={styles.accountDivider} />
           <View style={styles.accountContent}>
-            <Text style={[styles.accountLabel, { color: '#fff', fontSize: fontSize.sizes.body }]}>
+            <Text style={[styles.accountLabel, { color: '#000', fontSize: fontSize.sizes.body }]}>
               Lini Premium
             </Text>
-            <Text style={[styles.notificationSubLabel, { color: '#fff', opacity: 0.9, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
+            <Text style={[styles.notificationSubLabel, { color: '#000', opacity: 0.7, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
               Profitez de Lini sans publicité pour 0,99€/mois
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
+          <Ionicons name="chevron-forward" size={20} color="#000" />
         </TouchableOpacity>
 
         {/* Changer le mot de passe */}
@@ -1209,54 +1358,6 @@ export default function OptionScreen() {
           </Text>
         </View>
 
-        {/* TEMPORAIRE - Bouton pour activer le premium (DEV ONLY) */}
-        <TouchableOpacity
-          style={[
-            styles.accountOption,
-            { backgroundColor: theme.colors.iconActive, borderColor: '#E5E5E5' }
-          ]}
-          onPress={handleActivatePremiumDev}
-          disabled={loading}
-        >
-          <View style={[styles.accountIconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.3)' }]}>
-            <Ionicons name="diamond" size={22} color="#fff" />
-          </View>
-          <View style={styles.accountDivider} />
-          <View style={styles.accountContent}>
-            <Text style={[styles.accountLabel, { color: '#fff', fontSize: fontSize.sizes.body }]}>
-              [DEV] Activer Premium
-            </Text>
-            <Text style={[styles.notificationSubLabel, { color: '#fff', opacity: 0.9, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
-              Activer le premium permanent pour ce compte
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {/* TEMPORAIRE - Bouton pour désactiver le premium (DEV ONLY) */}
-        <TouchableOpacity
-          style={[
-            styles.accountOption,
-            { backgroundColor: '#DC3545', borderColor: '#DC3545' }
-          ]}
-          onPress={handleDeactivatePremiumDev}
-          disabled={loading}
-        >
-          <View style={[styles.accountIconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.3)' }]}>
-            <Ionicons name="diamond-outline" size={22} color="#fff" />
-          </View>
-          <View style={styles.accountDivider} />
-          <View style={styles.accountContent}>
-            <Text style={[styles.accountLabel, { color: '#fff', fontSize: fontSize.sizes.body }]}>
-              [DEV] Désactiver Premium
-            </Text>
-            <Text style={[styles.notificationSubLabel, { color: '#fff', opacity: 0.9, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
-              Retirer le statut premium pour tester
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[
             styles.accountOption,
@@ -1301,6 +1402,107 @@ export default function OptionScreen() {
           <Ionicons name="chevron-forward" size={20} color={theme.colors.iconInactive} />
         </TouchableOpacity>
       </View>
+
+      {/* Section Admin - Visible uniquement pour l'admin */}
+      {isAdmin && (
+        <View style={styles.section} ref={adminSectionRef}>
+          <View style={styles.sectionTitleContainer}>
+            <View style={[styles.titleAccent, { backgroundColor: '#FF6B6B' }]} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              Administration
+            </Text>
+          </View>
+
+          <View style={[styles.adminContainer, { backgroundColor: theme.colors.post, borderColor: '#E5E5E5' }]}>
+            <View style={styles.adminHeader}>
+              <Ionicons name="shield-checkmark" size={24} color="#FF6B6B" />
+              <Text style={[styles.adminTitle, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Gestion des comptes Premium
+              </Text>
+            </View>
+
+            <Text style={[styles.adminDescription, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+              Entrez l'adresse email d'un utilisateur pour gérer son statut Premium
+            </Text>
+
+            <TextInput
+              style={[
+                styles.adminInput,
+                {
+                  backgroundColor: theme.colors.background,
+                  borderColor: theme.colors.border,
+                  color: theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+              placeholder="exemple@email.com"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={adminEmailInput}
+              onChangeText={setAdminEmailInput}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!adminLoading}
+              onFocus={() => {
+                // Scroller vers la section admin quand le champ est activé
+                setTimeout(() => {
+                  adminSectionRef.current?.measureLayout(
+                    scrollViewRef.current,
+                    (_x, y) => {
+                      scrollViewRef.current?.scrollTo({ y: y - 100, animated: true });
+                    },
+                    () => {}
+                  );
+                }, 100);
+              }}
+            />
+
+            <View style={styles.adminButtonsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.adminButton,
+                  styles.adminButtonActivate,
+                  adminLoading && styles.adminButtonDisabled
+                ]}
+                onPress={handleAdminActivatePremium}
+                disabled={adminLoading || !adminEmailInput.trim()}
+              >
+                {adminLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="diamond" size={20} color="#fff" />
+                    <Text style={[styles.adminButtonText, { fontSize: fontSize.sizes.body }]}>
+                      Activer Premium
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.adminButton,
+                  styles.adminButtonDeactivate,
+                  adminLoading && styles.adminButtonDisabled
+                ]}
+                onPress={handleAdminDeactivatePremium}
+                disabled={adminLoading || !adminEmailInput.trim()}
+              >
+                {adminLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="diamond-outline" size={20} color="#fff" />
+                    <Text style={[styles.adminButtonText, { fontSize: fontSize.sizes.body }]}>
+                      Désactiver Premium
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Modal de changement de mot de passe */}
       <Modal
@@ -1382,7 +1584,7 @@ export default function OptionScreen() {
               />
 
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.colors.iconActive }]}
+                style={[styles.modalButton, { backgroundColor: '#007AFF' }]}
                 onPress={handleChangePassword}
                 disabled={loading}
               >
@@ -1398,8 +1600,160 @@ export default function OptionScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de confirmation de déconnexion */}
+      <Modal
+        visible={logoutModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+                Déconnexion
+              </Text>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body, textAlign: 'center' }]}>
+                Êtes-vous sûr de vouloir vous déconnecter ?
+              </Text>
+            </View>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.modalButtonSecondary, { backgroundColor: theme.colors.navbar, borderColor: theme.colors.border }]}
+                onPress={() => setLogoutModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonSecondaryText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: '#DC3545' }]}
+                onPress={confirmLogout}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { fontSize: fontSize.sizes.body }]}>
+                    Déconnexion
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal du sélecteur de couleur */}
+      <Modal
+        visible={showColorPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowColorPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.colorPickerModal, { backgroundColor: theme.colors.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+                Personnaliser la couleur
+              </Text>
+              <TouchableOpacity onPress={() => setShowColorPicker(false)}>
+                <Ionicons name="close" size={28} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.colorPickerContent}
+              contentContainerStyle={styles.colorPickerScrollContent}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+            >
+              {/* Couleur actuelle */}
+              <View style={styles.currentColorSection}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Couleur actuelle
+                </Text>
+                <View style={styles.currentColorDisplay}>
+                  <View style={[styles.colorPreviewLarge, { backgroundColor: customColor }]} />
+                  <Text style={[styles.colorHexValue, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
+                    {customColor}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Palette de couleurs */}
+              <View style={styles.paletteSection}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Sélectionner une couleur
+                </Text>
+                <View style={styles.colorPaletteGrid}>
+                  {colorPalette.map((item) => (
+                    <TouchableOpacity
+                      key={item.color}
+                      style={[
+                        styles.colorOption,
+                        {
+                          backgroundColor: item.color,
+                          borderWidth: customColor === item.color ? 3 : 1,
+                          borderColor: customColor === item.color ? '#000' : theme.colors.border,
+                        }
+                      ]}
+                      onPress={() => handleColorSelect(item.color)}
+                    >
+                      {customColor === item.color && (
+                        <Ionicons name="checkmark" size={20} color="#000" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Input code hexadécimal */}
+              <View style={styles.hexInputSection}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Ou entrez un code couleur
+                </Text>
+                <View style={styles.hexInputContainer}>
+                  <TextInput
+                    style={[
+                      styles.hexInput,
+                      {
+                        backgroundColor: theme.colors.navbar,
+                        color: theme.colors.text,
+                        borderColor: theme.colors.border,
+                        fontSize: fontSize.sizes.body,
+                      }
+                    ]}
+                    placeholder="#C9F2DF"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={hexInput}
+                    onChangeText={setHexInput}
+                    maxLength={7}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity
+                    style={[styles.hexSubmitButton, { backgroundColor: '#007AFF' }]}
+                    onPress={handleHexSubmit}
+                  >
+                    <Ionicons name="checkmark" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.hexHelperText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                  Format: #RRGGBB (ex: #FF6B9D)
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1471,7 +1825,7 @@ const styles = StyleSheet.create({
   modernThemeContainer: {
     flexDirection: 'row',
     gap: 12,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   modernThemeCard: {
     width: '31%',
@@ -1513,6 +1867,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
+  },
+  premiumBadge: {
+    position: 'absolute',
+    bottom: -10,
+    right: -5,
   },
   notificationOption: {
     flexDirection: 'row',
@@ -1786,6 +2145,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Fredoka_600SemiBold',
   },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+  },
+  modalButtonSecondary: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  modalButtonSecondaryText: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
   introContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1798,5 +2172,177 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_400Regular',
     textAlign: 'center',
     flex: 1,
+  },
+  colorPickerContainer: {
+    marginTop: 16,
+  },
+  colorPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  colorPreview: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  colorPickerButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    flex: 1,
+  },
+  colorPickerModal: {
+    width: '90%',
+    maxWidth: 500,
+    borderRadius: 20,
+    padding: 20,
+    height: '80%',
+  },
+  colorPickerContent: {
+    maxHeight: 500,
+  },
+  colorPickerScrollContent: {
+    paddingBottom: 20,
+  },
+  currentColorSection: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  sectionLabel: {
+    fontFamily: 'Fredoka_600SemiBold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  currentColorDisplay: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  colorPreviewLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  colorHexValue: {
+    fontFamily: 'Fredoka_600SemiBold',
+    letterSpacing: 1.5,
+    fontSize: 16,
+  },
+  paletteSection: {
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  colorPaletteGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    maxWidth: 320,
+  },
+  colorOption: {
+    width: 55,
+    height: 55,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  hexInputSection: {
+    marginBottom: 16,
+  },
+  hexInputContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  hexInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 15,
+    fontFamily: 'Fredoka_500Medium',
+  },
+  hexSubmitButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hexHelperText: {
+    fontFamily: 'Fredoka_400Regular',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  // Styles pour la section Admin
+  adminContainer: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    marginTop: 10,
+  },
+  adminHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12,
+  },
+  adminTitle: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  adminDescription: {
+    fontFamily: 'Fredoka_400Regular',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  adminInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 15,
+    fontFamily: 'Fredoka_500Medium',
+    marginBottom: 15,
+  },
+  adminButtonsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  adminButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 12,
+    gap: 8,
+  },
+  adminButtonActivate: {
+    backgroundColor: '#4CAF50',
+  },
+  adminButtonDeactivate: {
+    backgroundColor: '#DC3545',
+  },
+  adminButtonDisabled: {
+    opacity: 0.5,
+  },
+  adminButtonText: {
+    color: '#fff',
+    fontFamily: 'Fredoka_600SemiBold',
   },
 });

@@ -210,7 +210,7 @@ export const trainDirections = {
     { label: 'La Courneuve - 8 Mai 1945', value: 'La Courneuve - 8 Mai 1945' },
     { label: 'Villejuif - Louis Aragon / Mairie d\'Ivry', value: 'Villejuif - Louis Aragon / Mairie d\'Ivry' },
   ],
-  'Métro 7 bis': [
+  'Métro 7bis': [
     { label: 'Louis Blanc', value: 'Louis Blanc' },
     { label: 'Pré Saint-Gervais', value: 'Pré Saint-Gervais' },
   ],

@@ -63,6 +63,10 @@ export default function OnboardingScreen({ navigation, route }) {
   const [availableStations, setAvailableStations] = useState([]);
   const [stationSearchQuery, setStationSearchQuery] = useState('');
 
+  // États pour afficher/masquer les mots de passe
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   // Refs pour le scroll
   const scrollViewRef = useRef(null);
   const searchContainerRef = useRef(null);
@@ -412,20 +416,33 @@ export default function OnboardingScreen({ navigation, route }) {
                 <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
                   Mot de passe
                 </Text>
-                <TextInput
-                  style={[
-                    styles.fieldInput,
-                    {
-                      color: theme.colors.text,
-                      fontSize: fontSize.sizes.body,
-                    },
-                  ]}
-                  placeholder="Minimum 6 caractères"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  secureTextEntry
-                  value={formData.password}
-                  onChangeText={(text) => setFormData({ ...formData, password: text })}
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      styles.passwordInput,
+                      {
+                        color: theme.colors.text,
+                        fontSize: fontSize.sizes.body,
+                      },
+                    ]}
+                    placeholder="Minimum 6 caractères"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    secureTextEntry={!showPassword}
+                    value={formData.password}
+                    onChangeText={(text) => setFormData({ ...formData, password: text })}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-outline" : "eye-off-outline"}
+                      size={22}
+                      color={theme.colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
@@ -439,20 +456,33 @@ export default function OnboardingScreen({ navigation, route }) {
                 <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
                   Confirmer le mot de passe
                 </Text>
-                <TextInput
-                  style={[
-                    styles.fieldInput,
-                    {
-                      color: theme.colors.text,
-                      fontSize: fontSize.sizes.body,
-                    },
-                  ]}
-                  placeholder="Retapez votre mot de passe"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  secureTextEntry
-                  value={formData.confirmPassword}
-                  onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      styles.passwordInput,
+                      {
+                        color: theme.colors.text,
+                        fontSize: fontSize.sizes.body,
+                      },
+                    ]}
+                    placeholder="Retapez votre mot de passe"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    secureTextEntry={!showConfirmPassword}
+                    value={formData.confirmPassword}
+                    onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
+                      size={22}
+                      color={theme.colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </>
@@ -978,6 +1008,20 @@ const styles = StyleSheet.create({
   fieldInput: {
     fontFamily: 'Fredoka_500Medium',
     padding: 0,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingRight: 40,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 0,
+    padding: 8,
   },
   helperText: {
     fontFamily: 'Fredoka_400Regular',
