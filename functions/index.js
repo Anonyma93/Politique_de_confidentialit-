@@ -303,11 +303,50 @@ exports.sendNotificationOnNewPost = onDocumentCreated(
       console.log(`✅ ${results.successCount} notification(s) envoyée(s)`);
       if (results.failureCount > 0) {
         console.log(`❌ ${results.failureCount} échec(s)`);
+
+        // Nettoyer les tokens invalides
+        const cleanupPromises = [];
         results.responses.forEach((response, idx) => {
           if (!response.success) {
             console.error(`❌ Erreur pour notification ${idx}:`, response.error);
+
+            // Si le token est invalide, le supprimer de la base de données
+            const error = response.error;
+            if (error && (error.code === 'messaging/invalid-argument' ||
+                error.code === 'messaging/invalid-registration-token' ||
+                error.code === 'messaging/registration-token-not-registered')) {
+
+              const invalidToken = notifications[idx].token;
+              console.log('🧹 Nettoyage du token FCM invalide:', invalidToken.substring(0, 20) + '...');
+
+              // Trouver l'utilisateur avec ce token et le supprimer
+              const cleanupPromise = db.collection('users')
+                .where('fcmToken', '==', invalidToken)
+                .get()
+                .then((snapshot) => {
+                  const updates = [];
+                  snapshot.forEach((doc) => {
+                    updates.push(doc.ref.update({
+                      fcmToken: null,
+                      fcmTokenType: null,
+                    }));
+                  });
+                  return Promise.all(updates);
+                })
+                .then(() => {
+                  console.log('✅ Token invalide supprimé de la base de données');
+                })
+                .catch((cleanupError) => {
+                  console.error('❌ Erreur lors du nettoyage du token:', cleanupError);
+                });
+
+              cleanupPromises.push(cleanupPromise);
+            }
           }
         });
+
+        // Attendre que tous les nettoyages soient terminés
+        await Promise.all(cleanupPromises);
       }
 
       return {
@@ -435,6 +474,32 @@ exports.sendNotificationOnNewComment = onDocumentCreated(
 
     } catch (error) {
       console.error('❌ Erreur lors de l\'envoi de la notification:', error);
+
+      // Si le token est invalide, le supprimer de la base de données
+      if (error.code === 'messaging/invalid-argument' ||
+          error.code === 'messaging/invalid-registration-token' ||
+          error.code === 'messaging/registration-token-not-registered') {
+
+        console.log('🧹 Nettoyage du token FCM invalide pour l\'utilisateur:', postAuthorId);
+
+        try {
+          const postAuthorRef = db.collection('users').doc(postAuthorId);
+          await postAuthorRef.update({
+            fcmToken: null,
+            fcmTokenType: null,
+          });
+          console.log('✅ Token invalide supprimé de la base de données');
+        } catch (cleanupError) {
+          console.error('❌ Erreur lors du nettoyage du token:', cleanupError);
+        }
+
+        return {
+          success: true,
+          notificationsSent: 0,
+          skipped: 'invalid-token-cleaned',
+        };
+      }
+
       return {
         success: false,
         error: error.message,

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lini",
     "slug": "Lini",
-    "version": "1.0.10",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -34,7 +34,9 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "NOTIFICATIONS"
-      ]
+      ],
+      "googleServicesFile": "./google-services.json",
+      "package": "com.anonyma93.Lini"
     },
     "notification": {
       "icon": "./assets/logo.png",
@@ -54,7 +56,8 @@
           "color": "#ffffff",
           "sounds": []
         }
-      ]
+      ],
+      "@react-native-firebase/app"
     ],
     "extra": {
       "eas": {

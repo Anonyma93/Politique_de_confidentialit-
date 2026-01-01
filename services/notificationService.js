@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import messaging from '@react-native-firebase/messaging';
 
 // Configuration des notifications
 Notifications.setNotificationHandler({
@@ -217,48 +218,65 @@ export const setBadgeCount = async (count) => {
 };
 
 /**
- * Obtenir et enregistrer le token FCM/APNs natif
+ * Obtenir et enregistrer le token FCM natif
  * pour les notifications push Firebase Cloud Messaging
  */
 export const registerForPushNotifications = async (userId) => {
   try {
-    // Demander les permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+    // Demander les permissions pour iOS
+    if (Platform.OS === 'ios') {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+      if (!enabled) {
+        console.log('❌ Permission refusée pour les notifications push');
+        return { success: false, error: 'Permission refusée' };
+      }
+
+      // Enregistrer pour les notifications remote sur iOS
+      await messaging().registerDeviceForRemoteMessages();
     }
 
-    if (finalStatus !== 'granted') {
-      console.log('❌ Permission refusée pour les notifications push');
-      return { success: false, error: 'Permission refusée' };
+    // Demander aussi les permissions Expo pour les notifications locales
+    const { status: expoStatus } = await Notifications.getPermissionsAsync();
+    if (expoStatus !== 'granted') {
+      await Notifications.requestPermissionsAsync();
     }
 
-    // Obtenir le token natif du device (APNs pour iOS, FCM pour Android)
-    const deviceToken = await Notifications.getDevicePushTokenAsync();
-    const token = deviceToken.data;
+    // Obtenir le token FCM
+    const fcmToken = await messaging().getToken();
 
-    console.log('📱 Device Push Token Type:', deviceToken.type);
-    console.log('📱 Device Push Token:', token);
+    console.log('📱 FCM Token:', fcmToken);
 
     // Enregistrer le token dans Firestore
     if (userId) {
       const userRef = doc(db, 'users', userId);
       await setDoc(userRef, {
-        fcmToken: token, // Token FCM/APNs natif
-        fcmTokenType: deviceToken.type, // 'ios' ou 'android'
+        fcmToken: fcmToken, // Token FCM natif
+        fcmTokenType: Platform.OS, // 'ios' ou 'android'
         notificationsEnabled: true,
       }, { merge: true });
 
-      console.log('✅ Token FCM/APNs natif enregistré dans Firestore');
+      console.log('✅ Token FCM enregistré dans Firestore');
     }
+
+    // Écouter les rafraîchissements de token
+    messaging().onTokenRefresh(async (newToken) => {
+      console.log('🔄 Token FCM rafraîchi:', newToken);
+      if (userId) {
+        const userRef = doc(db, 'users', userId);
+        await setDoc(userRef, {
+          fcmToken: newToken,
+        }, { merge: true });
+      }
+    });
 
     return {
       success: true,
-      token: token,
-      tokenType: deviceToken.type,
+      token: fcmToken,
+      tokenType: Platform.OS,
     };
   } catch (error) {
     console.error('❌ Erreur lors de l\'enregistrement du token:', error);
@@ -267,4 +285,41 @@ export const registerForPushNotifications = async (userId) => {
       error: error.message,
     };
   }
+};
+
+/**
+ * Configurer les gestionnaires de messages FCM
+ */
+export const setupFCMMessageHandlers = (onNotificationReceived) => {
+  // Gérer les messages reçus en premier plan
+  const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+    console.log('📬 Notification reçue en premier plan:', remoteMessage);
+
+    // Afficher une notification locale pour que l'utilisateur la voie
+    if (remoteMessage.notification) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: remoteMessage.notification.title,
+          body: remoteMessage.notification.body,
+          data: remoteMessage.data,
+          sound: true,
+          badge: 1,
+        },
+        trigger: null, // Immédiat
+      });
+    }
+
+    if (onNotificationReceived) {
+      onNotificationReceived(remoteMessage);
+    }
+  });
+
+  // Gérer les messages reçus en arrière-plan (déjà configuré dans index.js)
+  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+    console.log('📬 Notification reçue en arrière-plan:', remoteMessage);
+  });
+
+  return () => {
+    unsubscribeForeground();
+  };
 };
