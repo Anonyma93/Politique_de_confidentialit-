@@ -56,8 +56,7 @@
           "color": "#ffffff",
           "sounds": []
         }
-      ],
-      "@react-native-firebase/app"
+      ]
     ],
     "extra": {
       "eas": {
