@@ -38,4 +38,9 @@ yarn-error.*
 
 # generated native folders
 /ios
+# Mais garder le GoogleService-Info.plist pour EAS Build
+!/ios/GoogleService-Info.plist
 /android
+
+# Firebase configuration (keep your keys secret!)
+# config/firebase.js

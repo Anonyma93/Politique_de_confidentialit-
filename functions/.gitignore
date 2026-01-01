@@ -1,0 +1,19 @@
+# Compiled JavaScript files
+**/*.js.map
+
+# Node.js dependencies
+node_modules/
+
+# Firebase cache
+.firebase/
+
+# Firebase config
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# npm
+package-lock.json
+npm-debug.log
