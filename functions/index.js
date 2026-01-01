@@ -9,11 +9,14 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-const { getMessaging } = require('firebase-admin/messaging');
+const { Expo } = require('expo-server-sdk');
 
 // Initialiser Firebase Admin
 initializeApp();
 const db = getFirestore();
+
+// Initialiser Expo Push Notification client
+const expo = new Expo();
 
 /**
  * Fonction planifiée : Reset des posts quotidien à 4h00 du matin (heure de Paris)
@@ -238,9 +241,16 @@ exports.sendNotificationOnNewPost = onDocumentCreated(
           return;
         }
 
-        // Vérifier si l'utilisateur a un token FCM
-        if (!userData.fcmToken) {
-          console.log(`⏭️ No FCM token for user: ${userId}`);
+        // Vérifier si l'utilisateur a un token Expo Push
+        if (!userData.expoPushToken) {
+          console.log(`⏭️ No Expo Push token for user: ${userId}`);
+          skippedCount++;
+          return;
+        }
+
+        // Vérifier que le token est valide
+        if (!Expo.isExpoPushToken(userData.expoPushToken)) {
+          console.log(`⏭️ Invalid Expo Push token for user: ${userId}`);
           skippedCount++;
           return;
         }
@@ -256,13 +266,12 @@ exports.sendNotificationOnNewPost = onDocumentCreated(
         const emoji = severityEmojis[postData.severity] || '📢';
         const severityLabel = severityLabels[postData.severity] || postData.severity;
 
-        // Créer le message de notification FCM
+        // Créer le message de notification Expo Push
         const message = {
-          token: userData.fcmToken,
-          notification: {
-            title: `${emoji} ${postData.line} - ${postData.incident}`,
-            body: `${severityLabel} à ${postData.station}`,
-          },
+          to: userData.expoPushToken,
+          sound: 'default',
+          title: `${emoji} ${postData.line} - ${postData.incident}`,
+          body: `${severityLabel} à ${postData.station}`,
           data: {
             postId: postId,
             line: postData.line,
@@ -270,20 +279,8 @@ exports.sendNotificationOnNewPost = onDocumentCreated(
             severity: postData.severity || '',
             incident: postData.incident || '',
           },
-          apns: {
-            payload: {
-              aps: {
-                sound: 'default',
-                badge: 1,
-              },
-            },
-          },
-          android: {
-            notification: {
-              sound: 'default',
-              channelId: 'incidents',
-            },
-          },
+          badge: 1,
+          channelId: 'incidents',
         };
 
         notifications.push(message);
@@ -296,63 +293,77 @@ exports.sendNotificationOnNewPost = onDocumentCreated(
         return { success: true, notificationsSent: 0 };
       }
 
-      // Envoyer les notifications via Firebase Cloud Messaging
-      console.log(`📤 Envoi de ${notifications.length} notification(s) via FCM...`);
-      const results = await getMessaging().sendEach(notifications);
+      // Envoyer les notifications via Expo Push Notification Service
+      console.log(`📤 Envoi de ${notifications.length} notification(s) via Expo Push...`);
 
-      console.log(`✅ ${results.successCount} notification(s) envoyée(s)`);
-      if (results.failureCount > 0) {
-        console.log(`❌ ${results.failureCount} échec(s)`);
+      // Diviser en lots (chunks) - Expo recommande max 100 par requête
+      const chunks = expo.chunkPushNotifications(notifications);
+      const tickets = [];
 
-        // Nettoyer les tokens invalides
-        const cleanupPromises = [];
-        results.responses.forEach((response, idx) => {
-          if (!response.success) {
-            console.error(`❌ Erreur pour notification ${idx}:`, response.error);
+      for (const chunk of chunks) {
+        try {
+          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+          tickets.push(...ticketChunk);
+        } catch (error) {
+          console.error('❌ Erreur lors de l\'envoi d\'un chunk:', error);
+        }
+      }
 
-            // Si le token est invalide, le supprimer de la base de données
-            const error = response.error;
-            if (error && (error.code === 'messaging/invalid-argument' ||
-                error.code === 'messaging/invalid-registration-token' ||
-                error.code === 'messaging/registration-token-not-registered')) {
+      // Analyser les résultats
+      let successCount = 0;
+      let failureCount = 0;
+      const cleanupPromises = [];
 
-              const invalidToken = notifications[idx].token;
-              console.log('🧹 Nettoyage du token FCM invalide:', invalidToken.substring(0, 20) + '...');
+      tickets.forEach((ticket, idx) => {
+        if (ticket.status === 'ok') {
+          successCount++;
+        } else if (ticket.status === 'error') {
+          failureCount++;
+          console.error(`❌ Erreur pour notification ${idx}:`, ticket.message);
 
-              // Trouver l'utilisateur avec ce token et le supprimer
-              const cleanupPromise = db.collection('users')
-                .where('fcmToken', '==', invalidToken)
-                .get()
-                .then((snapshot) => {
-                  const updates = [];
-                  snapshot.forEach((doc) => {
-                    updates.push(doc.ref.update({
-                      fcmToken: null,
-                      fcmTokenType: null,
-                    }));
-                  });
-                  return Promise.all(updates);
-                })
-                .then(() => {
-                  console.log('✅ Token invalide supprimé de la base de données');
-                })
-                .catch((cleanupError) => {
-                  console.error('❌ Erreur lors du nettoyage du token:', cleanupError);
+          // Si le token est invalide (DeviceNotRegistered), le supprimer
+          if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
+            const invalidToken = notifications[idx].to;
+            console.log('🧹 Nettoyage du token Expo invalide:', invalidToken);
+
+            // Trouver l'utilisateur avec ce token et le supprimer
+            const cleanupPromise = db.collection('users')
+              .where('expoPushToken', '==', invalidToken)
+              .get()
+              .then((snapshot) => {
+                const updates = [];
+                snapshot.forEach((doc) => {
+                  updates.push(doc.ref.update({
+                    expoPushToken: null,
+                    platform: null,
+                  }));
                 });
+                return Promise.all(updates);
+              })
+              .then(() => {
+                console.log('✅ Token invalide supprimé de la base de données');
+              })
+              .catch((cleanupError) => {
+                console.error('❌ Erreur lors du nettoyage du token:', cleanupError);
+              });
 
-              cleanupPromises.push(cleanupPromise);
-            }
+            cleanupPromises.push(cleanupPromise);
           }
-        });
+        }
+      });
 
-        // Attendre que tous les nettoyages soient terminés
-        await Promise.all(cleanupPromises);
+      // Attendre que tous les nettoyages soient terminés
+      await Promise.all(cleanupPromises);
+
+      console.log(`✅ ${successCount} notification(s) envoyée(s)`);
+      if (failureCount > 0) {
+        console.log(`❌ ${failureCount} échec(s)`);
       }
 
       return {
         success: true,
-        notificationsSent: results.successCount,
-        failures: results.failureCount,
+        notificationsSent: successCount,
+        failures: failureCount,
       };
 
     } catch (error) {
@@ -418,10 +429,16 @@ exports.sendNotificationOnNewComment = onDocumentCreated(
 
       const postAuthorData = postAuthorDoc.data();
 
-      // Vérifier si l'auteur a un token FCM
-      if (!postAuthorData.fcmToken) {
-        console.log('⏭️ L\'auteur du post n\'a pas de token FCM');
-        return { success: true, notificationsSent: 0, skipped: 'no-fcm-token' };
+      // Vérifier si l'auteur a un token Expo Push
+      if (!postAuthorData.expoPushToken) {
+        console.log('⏭️ L\'auteur du post n\'a pas de token Expo Push');
+        return { success: true, notificationsSent: 0, skipped: 'no-expo-push-token' };
+      }
+
+      // Vérifier que le token est valide
+      if (!Expo.isExpoPushToken(postAuthorData.expoPushToken)) {
+        console.log('⏭️ Token Expo Push invalide pour l\'auteur du post');
+        return { success: true, notificationsSent: 0, skipped: 'invalid-token' };
       }
 
       // Vérifier si les notifications sont activées pour l'auteur
@@ -430,13 +447,12 @@ exports.sendNotificationOnNewComment = onDocumentCreated(
         return { success: true, notificationsSent: 0, skipped: 'notifications-disabled' };
       }
 
-      // Créer le message de notification FCM
+      // Créer le message de notification Expo Push
       const message = {
-        token: postAuthorData.fcmToken,
-        notification: {
-          title: `💬 Nouveau commentaire de ${commentData.userDisplayName}`,
-          body: commentData.text,
-        },
+        to: postAuthorData.expoPushToken,
+        sound: 'default',
+        title: `💬 Nouveau commentaire de ${commentData.userDisplayName}`,
+        body: commentData.text,
         data: {
           type: 'comment',
           commentId: commentId,
@@ -444,62 +460,41 @@ exports.sendNotificationOnNewComment = onDocumentCreated(
           userId: commentData.userId,
           userDisplayName: commentData.userDisplayName || '',
         },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1,
-            },
-          },
-        },
-        android: {
-          notification: {
-            sound: 'default',
-            channelId: 'comments',
-          },
-        },
+        badge: 1,
+        channelId: 'comments',
       };
 
-      // Envoyer la notification via FCM
-      console.log('📤 Envoi de la notification via FCM...');
-      const result = await getMessaging().send(message);
+      // Envoyer la notification via Expo Push
+      console.log('📤 Envoi de la notification via Expo Push...');
+      const tickets = await expo.sendPushNotificationsAsync([message]);
+      const ticket = tickets[0];
 
-      console.log('✅ Notification envoyée avec succès:', result);
+      if (ticket.status === 'error') {
+        console.error('❌ Erreur lors de l\'envoi:', ticket.message);
+
+        // Si le token est invalide, le supprimer
+        if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
+          console.log('🧹 Nettoyage du token Expo invalide');
+          await postAuthorRef.update({
+            expoPushToken: null,
+            platform: null,
+          });
+          return { success: true, notificationsSent: 0, skipped: 'invalid-token-cleaned' };
+        }
+
+        return { success: false, error: ticket.message };
+      }
+
+      console.log('✅ Notification envoyée avec succès:', ticket.id);
 
       return {
         success: true,
         notificationsSent: 1,
-        messageId: result,
+        ticketId: ticket.id,
       };
 
     } catch (error) {
       console.error('❌ Erreur lors de l\'envoi de la notification:', error);
-
-      // Si le token est invalide, le supprimer de la base de données
-      if (error.code === 'messaging/invalid-argument' ||
-          error.code === 'messaging/invalid-registration-token' ||
-          error.code === 'messaging/registration-token-not-registered') {
-
-        console.log('🧹 Nettoyage du token FCM invalide pour l\'utilisateur:', postAuthorId);
-
-        try {
-          const postAuthorRef = db.collection('users').doc(postAuthorId);
-          await postAuthorRef.update({
-            fcmToken: null,
-            fcmTokenType: null,
-          });
-          console.log('✅ Token invalide supprimé de la base de données');
-        } catch (cleanupError) {
-          console.error('❌ Erreur lors du nettoyage du token:', cleanupError);
-        }
-
-        return {
-          success: true,
-          notificationsSent: 0,
-          skipped: 'invalid-token-cleaned',
-        };
-      }
-
       return {
         success: false,
         error: error.message,

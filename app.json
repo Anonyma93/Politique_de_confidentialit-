@@ -20,11 +20,7 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.anonyma93.Lini",
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "entitlements": {
-        "aps-environment": "production"
-      }
+      "bundleIdentifier": "com.anonyma93.Lini"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +31,6 @@
       "permissions": [
         "NOTIFICATIONS"
       ],
-      "googleServicesFile": "./google-services.json",
       "package": "com.anonyma93.Lini"
     },
     "notification": {
