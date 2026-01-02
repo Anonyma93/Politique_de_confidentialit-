@@ -222,13 +222,18 @@ export const setBadgeCount = async (count) => {
  */
 export const registerForPushNotifications = async (userId) => {
   try {
+    console.log('🔔 registerForPushNotifications: Début pour userId:', userId);
+
     // Demander les permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    console.log('🔔 Permission status existant:', existingStatus);
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
+      console.log('🔔 Demande de permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
+      console.log('🔔 Nouveau permission status:', finalStatus);
     }
 
     if (finalStatus !== 'granted') {
@@ -236,16 +241,19 @@ export const registerForPushNotifications = async (userId) => {
       return { success: false, error: 'Permission refusée' };
     }
 
+    console.log('🔔 Obtention du token Expo Push...');
     // Obtenir le token Expo Push (format: ExponentPushToken[xxx])
     const expoPushToken = await Notifications.getExpoPushTokenAsync({
       projectId: 'b60a62e4-093d-4ba2-89e6-054e1924ac77',
     });
     const token = expoPushToken.data;
 
-    console.log('📱 Expo Push Token:', token);
+    console.log('📱 Expo Push Token obtenu:', token);
+    console.log('📱 Platform:', Platform.OS);
 
     // Enregistrer le token dans Firestore
     if (userId) {
+      console.log('🔔 Enregistrement du token dans Firestore pour userId:', userId);
       const userRef = doc(db, 'users', userId);
       await setDoc(userRef, {
         expoPushToken: token, // Token Expo Push
@@ -253,7 +261,10 @@ export const registerForPushNotifications = async (userId) => {
         notificationsEnabled: true,
       }, { merge: true });
 
-      console.log('✅ Token Expo Push enregistré dans Firestore');
+      console.log('✅ Token Expo Push enregistré dans Firestore avec succès!');
+      console.log('✅ Données enregistrées:', { expoPushToken: token, platform: Platform.OS, notificationsEnabled: true });
+    } else {
+      console.warn('⚠️ Aucun userId fourni, token non enregistré');
     }
 
     return {
@@ -263,6 +274,7 @@ export const registerForPushNotifications = async (userId) => {
     };
   } catch (error) {
     console.error('❌ Erreur lors de l\'enregistrement du token:', error);
+    console.error('❌ Stack:', error.stack);
     return {
       success: false,
       error: error.message,

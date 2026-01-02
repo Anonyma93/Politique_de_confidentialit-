@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lini",
     "slug": "Lini",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -57,6 +57,7 @@
       "eas": {
         "projectId": "b60a62e4-093d-4ba2-89e6-054e1924ac77"
       }
-    }
+    },
+    "owner": "anonyma93"
   }
 }
