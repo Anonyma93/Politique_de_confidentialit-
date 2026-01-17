@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lini",
     "slug": "Lini",
-    "version": "1.2.3",
+    "version": "2.0.1",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -14,13 +14,19 @@
     },
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "2",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Lini utilise votre photothèque pour vous permettre de choisir une photo de profil. Par exemple, vous pouvez sélectionner une photo existante pour personnaliser votre compte et être reconnu par les autres utilisateurs de la communauté.",
+        "NSCameraUsageDescription": "Lini utilise l'appareil photo pour vous permettre de prendre une nouvelle photo de profil. Par exemple, vous pouvez prendre un selfie directement depuis l'application pour personnaliser votre compte."
       },
-      "bundleIdentifier": "com.anonyma93.Lini"
+      "bundleIdentifier": "com.anonyma93.Lini",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -51,7 +57,8 @@
           "color": "#ffffff",
           "sounds": []
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {
