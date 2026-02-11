@@ -36,6 +36,26 @@ const setupNotificationChannels = async () => {
       lightColor: '#4A90E2',
     });
 
+    // Canal pour les likes
+    await Notifications.setNotificationChannelAsync('likes', {
+      name: 'Likes',
+      description: 'Notifications pour les likes reçus sur vos posts',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+      vibrationPattern: [0, 150, 150, 150],
+      lightColor: '#FF6B9D',
+    });
+
+    // Canal pour les confirmations
+    await Notifications.setNotificationChannelAsync('confirmations', {
+      name: 'Confirmations',
+      description: 'Notifications pour les confirmations reçues sur vos posts',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+      vibrationPattern: [0, 150, 150, 150],
+      lightColor: '#4CAF50',
+    });
+
     console.log('✅ Canaux de notification Android créés');
   }
 };

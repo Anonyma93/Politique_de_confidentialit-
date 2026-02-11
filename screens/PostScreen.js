@@ -15,17 +15,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
-import WalkthroughTooltip from '../components/WalkthroughTooltip';
+import ScreenGuide from '../components/ScreenGuide';
 import { lignes, trainDirections, stations, incidents } from '../data/lignes';
 import { incrementPostsCount, getCurrentUser } from '../services/authService';
 import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { validatePost, sanitizePostData, containsSuspiciousContent, validateEstimatedDuration } from '../utils/validation';
+import { usePremium } from '../context/PremiumContext';
 // import { showInterstitialAd } from '../services/adService';
 
 export default function PostScreen({ navigation }) {
   const { theme, fontSize } = useTheme();
+  const { isPremium } = usePremium();
+
   const [loading, setLoading] = useState(false);
   const scrollViewRef = useRef(null);
 
@@ -35,14 +38,27 @@ export default function PostScreen({ navigation }) {
   const incidentSectionRef = useRef(null);
 
   // États du formulaire
-  const [postType, setPostType] = useState('incident'); // 'incident' ou 'info'
+  const [postType, setPostType] = useState('incident'); // 'incident' ou 'information'
   const [selectedLine, setSelectedLine] = useState(null);
   const [selectedDirection, setSelectedDirection] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [selectedSeverity, setSelectedSeverity] = useState(null);
+  const [estimatedDuration, setEstimatedDuration] = useState(null);
   const [comment, setComment] = useState('');
   const [userCities, setUserCities] = useState(['Paris']); // Villes sélectionnées par l'utilisateur
+
+  // Options de durée estimée
+  const durationOptions = [
+    { value: null, label: 'Non spécifié' },
+    { value: '15min', label: '15 min' },
+    { value: '30min', label: '30 min' },
+    { value: '1h', label: '1 heure' },
+    { value: '2h', label: '2 heures' },
+    { value: 'half_day', label: 'Demi-journée' },
+    { value: 'full_day', label: 'Journée entière' },
+    { value: 'unknown', label: 'Indéterminée' },
+  ];
 
   // Niveaux de gravité
   const severityLevels = [
@@ -95,6 +111,7 @@ export default function PostScreen({ navigation }) {
             setSelectedStation(null);
             setSelectedIncident(null);
             setSelectedSeverity(null);
+            setEstimatedDuration(null);
             setComment('');
 
             // Scroller vers le haut
@@ -179,7 +196,7 @@ export default function PostScreen({ navigation }) {
 
   // Filtrer les incidents selon le type de post
   const getFilteredIncidents = () => {
-    if (postType === 'info') {
+    if (postType === 'information') {
       // Pour les informations, on n'affiche pas de liste, on applique automatiquement "Information"
       return [];
     } else {
@@ -274,6 +291,7 @@ export default function PostScreen({ navigation }) {
     setSelectedStation(null);
     setSelectedIncident(null);
     setSelectedSeverity(null);
+    setEstimatedDuration(null);
     setComment('');
     // Scroller vers le haut
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -292,7 +310,7 @@ export default function PostScreen({ navigation }) {
     setLoading(true);
 
     try {
-      // Récupérer les données utilisateur depuis Firestore pour obtenir le statut premium
+      // Récupérer les données utilisateur depuis Firestore pour obtenir les préférences
       const userDocRef = doc(db, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
       const userData = userDocSnap.exists() ? userDocSnap.data() : {};
@@ -302,19 +320,22 @@ export default function PostScreen({ navigation }) {
       const lineCity = selectedLineData?.city || 'Paris'; // Par défaut Paris si non défini
 
       // Créer le post dans Firestore
-      const postData = {
+      let postData = {
         userId: user.uid,
         userEmail: user.email,
         userDisplayName: user.displayName || 'Utilisateur',
         userPhotoURL: user.photoURL || null,
-        userIsPremium: userData.isPremium || false,
-        postType: postType, // 'incident' ou 'info'
+        userIsPremium: isPremium,
+        userHideLastNames: userData.hideLastNames || false,
+        type: postType, // 'incident' ou 'information'
         line: selectedLine,
         city: lineCity, // Ville de la ligne
         direction: selectedDirection,
+        destination: selectedDirection, // Ajout pour compatibilité avec les règles
         station: selectedStation,
-        incident: postType === 'info' ? 'Information' : selectedIncident, // Appliquer automatiquement "Information" pour les infos
-        severity: postType === 'incident' ? selectedSeverity : null,
+        incident: postType === 'information' ? 'Information' : selectedIncident,
+        severity: postType === 'incident' ? selectedSeverity : 'sans',
+        estimatedDuration: postType === 'incident' ? (estimatedDuration || null) : null,
         comment: comment.trim(),
         likesCount: 0,
         likedBy: [], // Liste des UIDs qui ont liké
@@ -323,6 +344,33 @@ export default function PostScreen({ navigation }) {
         confirmedBy: [], // Liste des UIDs qui ont confirmé
         createdAt: new Date().toISOString(),
       };
+
+      // Vérifier le contenu suspect
+      if (containsSuspiciousContent(postData.comment) ||
+          containsSuspiciousContent(postData.incident)) {
+        setLoading(false);
+        Alert.alert('Erreur', 'Le contenu semble contenir des éléments suspects. Veuillez vérifier votre saisie.');
+        return;
+      }
+
+      // Valider la durée estimée
+      const durationValidation = validateEstimatedDuration(postData.estimatedDuration);
+      if (!durationValidation.valid) {
+        setLoading(false);
+        Alert.alert('Erreur de validation', durationValidation.error);
+        return;
+      }
+
+      // Valider les données
+      const validation = validatePost(postData);
+      if (!validation.valid) {
+        setLoading(false);
+        Alert.alert('Erreur de validation', validation.error);
+        return;
+      }
+
+      // Sanitize les données
+      postData = sanitizePostData(postData);
 
       await addDoc(collection(db, 'posts'), postData);
 
@@ -347,6 +395,7 @@ export default function PostScreen({ navigation }) {
               setSelectedStation(null);
               setSelectedIncident(null);
               setSelectedSeverity(null);
+              setEstimatedDuration(null);
               setComment('');
               // Rediriger vers Feed
               navigation.navigate('Feed');
@@ -411,19 +460,12 @@ export default function PostScreen({ navigation }) {
 
         {/* Introduction au formulaire */}
         <View style={styles.section}>
-          <WalkthroughTooltip
-            stepId={WALKTHROUGH_STEPS.POST.INTRODUCTION}
-            title="Créer un post"
-            content="Signalez rapidement un incident ou partagez une information sur le trafic. Choisissez d'abord le type (Incident ou Information), puis sélectionnez la ligne, la direction, l'arrêt concerné et ajoutez vos détails. Pour un incident, indiquez également sa gravité."
-            placement="bottom"
-          >
-            <View style={styles.introContainer}>
-              <Ionicons name="help-circle-outline" size={20} color={theme.colors.iconActive} />
-              <Text style={[styles.introText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                Remplissez le formulaire ci-dessous pour partager une info trafic
-              </Text>
-            </View>
-          </WalkthroughTooltip>
+          <View style={styles.introContainer}>
+            <Ionicons name="help-circle-outline" size={20} color={theme.colors.iconActive} />
+            <Text style={[styles.introText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+              Remplissez le formulaire ci-dessous pour partager une info trafic
+            </Text>
+          </View>
         </View>
 
         {/* Onglets pour choisir le type de post */}
@@ -438,9 +480,15 @@ export default function PostScreen({ navigation }) {
                 }
               ]}
               onPress={() => {
+                if (postType === 'incident') return;
                 setPostType('incident');
-                setSelectedIncident(null); // Réinitialiser le motif
-                setSelectedSeverity(null); // Réinitialiser la gravité
+                setSelectedLine(null);
+                setSelectedDirection(null);
+                setSelectedStation(null);
+                setSelectedIncident(null);
+                setSelectedSeverity(null);
+                setEstimatedDuration(null);
+                setComment('');
               }}
             >
               <Ionicons
@@ -463,25 +511,31 @@ export default function PostScreen({ navigation }) {
               style={[
                 styles.tab,
                 {
-                  backgroundColor: postType === 'info' ? theme.colors.primary : theme.colors.navbar,
-                  borderColor: postType === 'info' ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: postType === 'information' ? theme.colors.primary : theme.colors.navbar,
+                  borderColor: postType === 'information' ? theme.colors.primary : theme.colors.border,
                 }
               ]}
               onPress={() => {
-                setPostType('info');
-                setSelectedIncident(null); // Réinitialiser le motif
-                setSelectedSeverity(null); // Réinitialiser la gravité
+                if (postType === 'information') return;
+                setPostType('information');
+                setSelectedLine(null);
+                setSelectedDirection(null);
+                setSelectedStation(null);
+                setSelectedIncident(null);
+                setSelectedSeverity(null);
+                setEstimatedDuration(null);
+                setComment('');
               }}
             >
               <Ionicons
                 name="information-circle"
                 size={20}
-                color={postType === 'info' ? theme.colors.text : theme.colors.textSecondary}
+                color={postType === 'information' ? theme.colors.text : theme.colors.textSecondary}
               />
               <Text style={[
                 styles.tabText,
                 {
-                  color: postType === 'info' ? theme.colors.text : theme.colors.textSecondary,
+                  color: postType === 'information' ? theme.colors.text : theme.colors.textSecondary,
                   fontSize: fontSize.sizes.body,
                 }
               ]}>
@@ -731,6 +785,58 @@ export default function PostScreen({ navigation }) {
         </View>
       )}
 
+      {/* Sélection de la durée estimée (uniquement pour les incidents) */}
+      {postType === 'incident' && (
+        <View style={styles.section}>
+          <View style={styles.sectionTitleContainer}>
+            <View style={styles.titleAccent} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              Durée estimée
+            </Text>
+          </View>
+          <View style={styles.selectionsContainer}>
+            {durationOptions
+              .filter(duration => estimatedDuration === null || estimatedDuration === duration.value || duration.value === null)
+              .map((duration) => {
+              const isSelected = estimatedDuration === duration.value;
+              return (
+                <TouchableOpacity
+                  key={duration.value || 'null'}
+                  style={[
+                    styles.selectionItem,
+                    {
+                      backgroundColor: isSelected ? theme.colors.primary : theme.colors.navbar,
+                      borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                    }
+                  ]}
+                  onPress={() => setEstimatedDuration(isSelected ? null : duration.value)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons
+                      name="time-outline"
+                      size={18}
+                      color={isSelected ? theme.colors.text : theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.selectionText,
+                        {
+                          color: isSelected ? theme.colors.text : theme.colors.text,
+                          fontSize: fontSize.sizes.body,
+                        }
+                      ]}
+                    >
+                      {duration.label}
+                    </Text>
+                  </View>
+                  {isSelected && duration.value !== null && <Ionicons name="checkmark" size={20} color={theme.colors.text} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* Commentaire */}
       <View style={styles.section}>
         <View style={styles.sectionTitleContainer}>
@@ -809,6 +915,7 @@ export default function PostScreen({ navigation }) {
       </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ScreenGuide screenName="Post" />
     </View>
   );
 }

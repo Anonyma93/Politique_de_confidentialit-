@@ -13,38 +13,22 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path, Rect } from 'react-native-svg';
+
 import * as ImagePicker from 'expo-image-picker';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTheme } from '../context/ThemeContext';
-import { signUp, signInWithApple, isAppleAuthAvailable } from '../services/authService';
+import { signUp } from '../services/authService';
 import { lignes } from '../data/lignes';
 import { getStationsByPreferredLines } from '../data/stations';
+import { useResponsive } from '../utils/responsive';
 
-// Composant Logo Lini
-const LiniLogo = ({ size = 120 }) => (
-  <Svg width={size} height={size} viewBox="0 0 1000 1000" fill="none">
-    <Path
-      d="M394.039 606H220.309C217.574 606 215.035 605.512 212.691 604.535C210.348 603.559 208.297 602.24 206.539 600.58C204.879 598.822 203.561 596.771 202.584 594.428C201.607 592.084 201.119 589.545 201.119 586.811V395.941H239.205V567.914H394.039V606ZM714.84 589.74C714.84 592.475 714.303 595.014 713.229 597.357C712.252 599.701 710.885 601.752 709.127 603.51C707.467 605.17 705.465 606.488 703.121 607.465C700.777 608.441 698.287 608.93 695.65 608.93C693.307 608.93 690.914 608.49 688.473 607.611C686.129 606.732 684.029 605.316 682.174 603.363L543.014 458.051V606H504.928V412.201C504.928 408.295 506.002 404.779 508.15 401.654C510.396 398.432 513.229 396.039 516.646 394.477C520.26 393.012 523.971 392.67 527.779 393.451C531.588 394.135 534.859 395.893 537.594 398.725L676.754 543.891V395.941H714.84V589.74Z"
-      fill="#033540"
-    />
-    <Path
-      d="M460.396 606H422.311V395.941H460.396V606ZM797.604 606H759.518V395.941H797.604V606Z"
-      fill="white"
-    />
-    <Rect x="319" y="631" width="363" height="9" fill="white" />
-    <Rect x="319" y="360" width="363" height="9" fill="#033540" />
-  </Svg>
-);
 
 export default function OnboardingScreen({ navigation, route }) {
   const { theme, fontSize } = useTheme();
+  const { isTablet, maxContentWidth } = useResponsive();
   const [loading, setLoading] = useState(false);
-  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
 
   // Récupérer les paramètres de navigation
   const mode = route?.params?.mode || 'signup'; // 'signup' ou 'complete'
-  const isAppleAuth = route?.params?.appleAuth || false;
   const initialUserData = route?.params?.userData || {};
 
   const [formData, setFormData] = useState({
@@ -84,11 +68,6 @@ export default function OnboardingScreen({ navigation, route }) {
     }
   };
 
-  // Vérifier la disponibilité d'Apple Auth
-  useEffect(() => {
-    checkAppleAuthAvailability();
-  }, []);
-
   // Réinitialiser les sélections quand la ville change
   useEffect(() => {
     setSelectedLines([]);
@@ -105,11 +84,6 @@ export default function OnboardingScreen({ navigation, route }) {
       setAvailableStations([]);
     }
   }, [selectedLines]);
-
-  const checkAppleAuthAvailability = async () => {
-    const available = await isAppleAuthAvailable();
-    setAppleAuthAvailable(available);
-  };
 
   // Sélectionner une photo de profil
   const pickImage = async () => {
@@ -262,26 +236,13 @@ export default function OnboardingScreen({ navigation, route }) {
     }
   };
 
-  // Connexion avec Apple
-  const handleAppleSignIn = async () => {
-    setLoading(true);
-    const result = await signInWithApple();
-    setLoading(false);
-
-    if (result.success) {
-      navigation.replace('Main');
-    } else if (!result.canceled) {
-      Alert.alert('Erreur', result.error || 'Erreur lors de la connexion avec Apple');
-    }
-  };
-
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      style={{ flex: 1, backgroundColor: '#C9F2DF' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <View style={{ flex: 1, backgroundColor: '#C9F2DF' }}>
         {/* Cercles décoratifs en arrière-plan */}
 {/*         <View style={styles.backgroundDecoration}>
           <View style={[styles.circle1, { backgroundColor: theme.colors.iconActive, opacity: 0.08 }]} />
@@ -292,13 +253,23 @@ export default function OnboardingScreen({ navigation, route }) {
         <ScrollView
           ref={scrollViewRef}
           style={styles.container}
-          contentContainerStyle={{ padding: 20, paddingTop: 40, paddingBottom: 400 }}
+          contentContainerStyle={{
+            padding: 20,
+            paddingTop: 40,
+            paddingBottom: 400,
+            alignItems: isTablet ? 'center' : 'stretch',
+          }}
           keyboardShouldPersistTaps="handled"
         >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <LiniLogo size={250} />
-        </View>
+        <View style={[styles.contentWrapper, { maxWidth: maxContentWidth, width: '100%' }]}>
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../logosansfond.png')}
+              style={{ width: isTablet ? 200 : 250, height: isTablet ? 200 : 250 }}
+              resizeMode="contain"
+            />
+          </View>
 
         <Text style={[styles.title, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
           {mode === 'complete' ? 'Compléter votre profil' : 'Créer un compte'}
@@ -431,6 +402,8 @@ export default function OnboardingScreen({ navigation, route }) {
                     secureTextEntry={!showPassword}
                     value={formData.password}
                     onChangeText={(text) => setFormData({ ...formData, password: text })}
+                    autoComplete="off"
+                    textContentType="oneTimeCode"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
@@ -471,6 +444,8 @@ export default function OnboardingScreen({ navigation, route }) {
                     secureTextEntry={!showConfirmPassword}
                     value={formData.confirmPassword}
                     onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                    autoComplete="off"
+                    textContentType="oneTimeCode"
                   />
                   <TouchableOpacity
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -500,7 +475,7 @@ export default function OnboardingScreen({ navigation, route }) {
             Sélectionnez votre ville pour voir les informations pertinentes
           </Text>
 
-          <View style={styles.cityRow}>
+          <View style={[styles.cityRow, { flexWrap: 'wrap' }]}>
             <TouchableOpacity
               style={[
                 styles.cityCard,
@@ -599,40 +574,414 @@ export default function OnboardingScreen({ navigation, route }) {
               )}
             </TouchableOpacity>
 
-            <View
+            <TouchableOpacity
               style={[
                 styles.cityCard,
                 {
-                  backgroundColor: theme.colors.post,
+                  backgroundColor: selectedCity === 'Toulouse' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
-                  opacity: 0.6,
                 }
               ]}
+              onPress={() => setSelectedCity('Toulouse')}
             >
               <View style={[
                 styles.cityIconContainer,
                 {
-                  backgroundColor: theme.colors.background,
+                  backgroundColor: selectedCity === 'Toulouse' ? theme.colors.background : theme.colors.background,
                 }
               ]}>
-                <Ionicons
-                  name="add-circle-outline"
-                  size={32}
-                  color={theme.colors.textSecondary}
+                <Image
+                  source={require('../assets/toulouse.png')}
+                  style={[
+                    styles.cityIcon,
+                    {
+                      opacity: selectedCity === 'Toulouse' ? 1 : 0.5,
+                    }
+                  ]}
+                  resizeMode="contain"
                 />
               </View>
               <Text
                 style={[
                   styles.cityLabel,
                   {
-                    color: theme.colors.textSecondary,
+                    color: selectedCity === 'Toulouse' ? theme.colors.text : theme.colors.text,
                     fontSize: fontSize.sizes.body,
                   }
                 ]}
               >
-                Bientôt
+                Toulouse
               </Text>
-            </View>
+              {selectedCity === 'Toulouse' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Bordeaux' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Bordeaux')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Bordeaux' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="wine-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Bordeaux' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Bordeaux' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Bordeaux
+              </Text>
+              {selectedCity === 'Bordeaux' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Marseille' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Marseille')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Marseille' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="boat-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Marseille' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Marseille' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Marseille
+              </Text>
+              {selectedCity === 'Marseille' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Lille' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Lille')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Lille' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="flower-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Lille' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Lille' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Lille
+              </Text>
+              {selectedCity === 'Lille' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Nantes' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Nantes')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Nantes' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="leaf-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Nantes' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Nantes' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Nantes
+              </Text>
+              {selectedCity === 'Nantes' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Rennes' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Rennes')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Rennes' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="shield-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Rennes' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Rennes' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Rennes
+              </Text>
+              {selectedCity === 'Rennes' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Nice' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Nice')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Nice' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="sunny-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Nice' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Nice' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Nice
+              </Text>
+              {selectedCity === 'Nice' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Montpellier' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Montpellier')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Montpellier' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="water-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Montpellier' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Montpellier' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Montpellier
+              </Text>
+              {selectedCity === 'Montpellier' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Strasbourg' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Strasbourg')}
+            >
+              <View style={[
+                styles.cityIconContainer,
+                {
+                  backgroundColor: selectedCity === 'Strasbourg' ? theme.colors.background : theme.colors.background,
+                }
+              ]}>
+                <Ionicons
+                  name="star-outline"
+                  size={32}
+                  color={theme.colors.iconActive}
+                  style={{ opacity: selectedCity === 'Strasbourg' ? 1 : 0.5 }}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Strasbourg' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Strasbourg
+              </Text>
+              {selectedCity === 'Strasbourg' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Message Premium pour plusieurs villes */}
@@ -824,7 +1173,7 @@ export default function OnboardingScreen({ navigation, route }) {
         <View style={styles.buttonsRow}>
           <TouchableOpacity
             style={[
-              mode === 'complete' ? styles.buttonFull : styles.buttonHalf,
+              styles.buttonFull,
               { backgroundColor: theme.colors.iconActive }
             ]}
             onPress={handleSignUp}
@@ -838,34 +1187,6 @@ export default function OnboardingScreen({ navigation, route }) {
               </Text>
             )}
           </TouchableOpacity>
-
-          {mode !== 'complete' && appleAuthAvailable && (
-            <TouchableOpacity
-              style={[
-                styles.buttonHalf,
-                styles.appleButtonCustom,
-                { backgroundColor: theme.name === 'dark' ? '#FFFFFF' : '#000000' }
-              ]}
-              onPress={handleAppleSignIn}
-              disabled={loading}
-            >
-              <Ionicons
-                name="logo-apple"
-                size={20}
-                color={theme.name === 'dark' ? '#000000' : '#FFFFFF'}
-                style={styles.appleIcon}
-              />
-              <Text style={[
-                styles.buttonText,
-                {
-                  fontSize: fontSize.sizes.body,
-                  color: theme.name === 'dark' ? '#000000' : '#FFFFFF'
-                }
-              ]}>
-                Apple
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Lien vers connexion (masqué en mode complete) */}
@@ -882,6 +1203,7 @@ export default function OnboardingScreen({ navigation, route }) {
             </Text>
           </TouchableOpacity>
         )}
+        </View>
       </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -891,6 +1213,9 @@ export default function OnboardingScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  contentWrapper: {
+    width: '100%',
   },
   backgroundDecoration: {
     position: 'absolute',
@@ -1047,12 +1372,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  appleButtonCustom: {
-    backgroundColor: '#000',
-  },
-  appleIcon: {
-    marginRight: 6,
   },
   button: {
     borderRadius: 12,

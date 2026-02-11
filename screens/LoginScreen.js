@@ -10,39 +10,26 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Image,
 } from 'react-native';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import Svg, { Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { signIn, signInWithApple, isAppleAuthAvailable } from '../services/authService';
+import { signIn, signInWithApple } from '../services/authService';
 import { registerForPushNotifications } from '../services/notificationService';
+import { useResponsive } from '../utils/responsive';
+import * as AppleAuthentication from 'expo-apple-authentication';
 // import { showInterstitialAd } from '../services/adService';
 
 
-// Composant Logo Lini
-const LiniLogo = ({ size = 120 }) => (
-  <Svg width={size} height={size} viewBox="0 0 1000 1000" fill="none">
-    <Path
-      d="M394.039 606H220.309C217.574 606 215.035 605.512 212.691 604.535C210.348 603.559 208.297 602.24 206.539 600.58C204.879 598.822 203.561 596.771 202.584 594.428C201.607 592.084 201.119 589.545 201.119 586.811V395.941H239.205V567.914H394.039V606ZM714.84 589.74C714.84 592.475 714.303 595.014 713.229 597.357C712.252 599.701 710.885 601.752 709.127 603.51C707.467 605.17 705.465 606.488 703.121 607.465C700.777 608.441 698.287 608.93 695.65 608.93C693.307 608.93 690.914 608.49 688.473 607.611C686.129 606.732 684.029 605.316 682.174 603.363L543.014 458.051V606H504.928V412.201C504.928 408.295 506.002 404.779 508.15 401.654C510.396 398.432 513.229 396.039 516.646 394.477C520.26 393.012 523.971 392.67 527.779 393.451C531.588 394.135 534.859 395.893 537.594 398.725L676.754 543.891V395.941H714.84V589.74Z"
-      fill="#033540"
-    />
-    <Path
-      d="M460.396 606H422.311V395.941H460.396V606ZM797.604 606H759.518V395.941H797.604V606Z"
-      fill="white"
-    />
-    <Rect x="319" y="631" width="363" height="9" fill="white" />
-    <Rect x="319" y="360" width="363" height="9" fill="#033540" />
-  </Svg>
-);
 
 export default function LoginScreen({ navigation }) {
   const { theme, fontSize } = useTheme();
+  const { isTablet, maxContentWidth } = useResponsive();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
 
   // Valeurs animées
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -54,8 +41,12 @@ export default function LoginScreen({ navigation }) {
   const formTranslateY = useRef(new Animated.Value(30)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
 
-  // Vérifier la disponibilité d'Apple Auth
+  // Vérifier la disponibilité de Sign In with Apple
   useEffect(() => {
+    const checkAppleAuthAvailability = async () => {
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      setAppleAuthAvailable(isAvailable);
+    };
     checkAppleAuthAvailability();
   }, []);
 
@@ -118,11 +109,6 @@ export default function LoginScreen({ navigation }) {
     ]).start();
   }, []);
 
-  const checkAppleAuthAvailability = async () => {
-    const available = await isAppleAuthAvailable();
-    setAppleAuthAvailable(available);
-  };
-
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
@@ -155,22 +141,22 @@ export default function LoginScreen({ navigation }) {
       // Enregistrer le token FCM pour les notifications push
       await registerForPushNotifications(result.user.uid);
 
-      // Si c'est un nouvel utilisateur OU si le profil n'est pas complet
-      // (pas de lignes/stations préférées), rediriger vers l'onboarding
-      if (result.isNewUser || result.profileIncomplete) {
-        navigation.replace('Onboarding', {
+      // Si c'est un nouvel utilisateur, rediriger vers l'onboarding pour compléter le profil
+      if (result.isNewUser) {
+        navigation.navigate('Onboarding', {
           mode: 'complete',
-          appleAuth: true,
-          userData: result.userData
+          userData: {
+            firstName: result.user.displayName?.split(' ')[0] || 'Utilisateur',
+            lastName: result.user.displayName?.split(' ')[1] || 'Apple',
+            email: result.user.email,
+            photoURL: result.user.photoURL,
+          },
         });
       } else {
-        // Afficher une publicité pour les utilisateurs non-premium
-        // await showInterstitialAd(result.user.uid);
-
         navigation.replace('Main');
       }
     } else if (!result.canceled) {
-      Alert.alert('Erreur', result.error || 'Erreur lors de la connexion avec Apple');
+      Alert.alert('Erreur de connexion', result.error || 'Une erreur est survenue');
     }
   };
 
@@ -179,56 +165,61 @@ export default function LoginScreen({ navigation }) {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={[styles.container, { backgroundColor: theme.name === 'normal' ? theme.colors.primary : theme.colors.background }]}>
-        {/* Logo */}
-        <Animated.View
-          style={[
-            styles.logoContainer,
-            {
-              opacity: logoOpacity,
-              transform: [{ scale: logoScale }],
-            },
-          ]}
-        >
-          <LiniLogo size={250} />
-        </Animated.View>
+      <View style={[styles.container, { backgroundColor: '#C9F2DF' }]}>
+        <View style={[styles.contentContainer, { maxWidth: maxContentWidth, width: '100%' }]}>
+          {/* Logo */}
+          <Animated.View
+            style={[
+              styles.logoContainer,
+              {
+                opacity: logoOpacity,
+                transform: [{ scale: logoScale }],
+              },
+            ]}
+          >
+            <Image
+              source={require('../logosansfond.png')}
+              style={{ width: isTablet ? 200 : 250, height: isTablet ? 200 : 250 }}
+              resizeMode="contain"
+            />
+          </Animated.View>
 
-        <Animated.Text
-          style={[
-            styles.title,
-            {
-              color: theme.colors.text,
-              fontSize: fontSize.sizes.title,
-              fontFamily: 'Fredoka_600SemiBold',
-              opacity: titleOpacity,
-              transform: [{ translateY: titleTranslateY }],
-            },
-          ]}
-        >
-          Bienvenue sur Lini
-        </Animated.Text>
-        <Animated.Text
-          style={[
-            styles.subtitle,
-            {
-              color: theme.colors.textSecondary,
-              fontSize: fontSize.sizes.body,
-              fontFamily: 'Fredoka_400Regular',
-              opacity: subtitleOpacity,
-              transform: [{ translateY: subtitleTranslateY }],
-            },
-          ]}
-        >
-          Connectez-vous à votre compte
-        </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.title,
+              {
+                color: theme.colors.text,
+                fontSize: fontSize.sizes.title,
+                fontFamily: 'Fredoka_600SemiBold',
+                opacity: titleOpacity,
+                transform: [{ translateY: titleTranslateY }],
+              },
+            ]}
+          >
+            Bienvenue sur Lini
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.subtitle,
+              {
+                color: theme.colors.textSecondary,
+                fontSize: fontSize.sizes.body,
+                fontFamily: 'Fredoka_400Regular',
+                opacity: subtitleOpacity,
+                transform: [{ translateY: subtitleTranslateY }],
+              },
+            ]}
+          >
+            Connectez-vous à votre compte
+          </Animated.Text>
 
-        <Animated.View
-          style={{
-            width: '100%',
-            opacity: formOpacity,
-            transform: [{ translateY: formTranslateY }],
-          }}
-        >
+          <Animated.View
+            style={{
+              width: '100%',
+              opacity: formOpacity,
+              transform: [{ translateY: formTranslateY }],
+            }}
+          >
           <TextInput
             style={[
               styles.input,
@@ -279,60 +270,26 @@ export default function LoginScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Boutons de connexion côte à côte */}
-          <View style={styles.buttonsRow}>
-            <TouchableOpacity
-              style={[styles.buttonHalf, { backgroundColor: theme.colors.iconActive }]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.7}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { fontSize: fontSize.sizes.body, fontFamily: 'Fredoka_600SemiBold' },
-                  ]}
-                >
-                  Se connecter
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {appleAuthAvailable && (
-              <TouchableOpacity
+          {/* Bouton de connexion */}
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: theme.colors.iconActive }]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text
                 style={[
-                  styles.buttonHalf,
-                  styles.appleButtonCustom,
-                  { backgroundColor: theme.name === 'dark' ? '#FFFFFF' : '#000000' }
+                  styles.buttonText,
+                  { fontSize: fontSize.sizes.body, fontFamily: 'Fredoka_600SemiBold' },
                 ]}
-                onPress={handleAppleSignIn}
-                disabled={loading}
-                activeOpacity={0.7}
               >
-                <Ionicons
-                  name="logo-apple"
-                  size={20}
-                  color={theme.name === 'dark' ? '#000000' : '#FFFFFF'}
-                  style={styles.appleIcon}
-                />
-                <Text
-                  style={[
-                    styles.buttonText,
-                    {
-                      fontSize: fontSize.sizes.body,
-                      fontFamily: 'Fredoka_600SemiBold',
-                      color: theme.name === 'dark' ? '#000000' : '#FFFFFF'
-                    },
-                  ]}
-                >
-                  Apple
-                </Text>
-              </TouchableOpacity>
+                Se connecter
+              </Text>
             )}
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
@@ -346,6 +303,39 @@ export default function LoginScreen({ navigation }) {
             </Text>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
           </View>
+
+          {/* Bouton Sign in with Apple */}
+          {appleAuthAvailable && (
+            <TouchableOpacity
+              style={[
+                styles.appleButton,
+                {
+                  backgroundColor: theme.name === 'dark' ? '#FFFFFF' : '#000000',
+                  borderColor: theme.name === 'dark' ? '#000000' : '#FFFFFF',
+                }
+              ]}
+              onPress={handleAppleSignIn}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="logo-apple"
+                size={22}
+                color={theme.name === 'dark' ? '#000000' : '#FFFFFF'}
+              />
+              <Text
+                style={[
+                  styles.appleButtonText,
+                  {
+                    color: theme.name === 'dark' ? '#000000' : '#FFFFFF',
+                    fontSize: fontSize.sizes.body,
+                    fontFamily: 'Fredoka_600SemiBold',
+                  },
+                ]}
+              >
+                Continuer avec Apple
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[
@@ -369,6 +359,7 @@ export default function LoginScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         </Animated.View>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -380,6 +371,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  contentContainer: {
+    alignItems: 'center',
+    alignSelf: 'center',
   },
   logoContainer: {
     marginBottom: -50,
@@ -414,27 +409,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 15,
     top: 15,
-    padding: 5,
   },
-  buttonsRow: {
-    flexDirection: 'row',
+  button: {
     width: '100%',
-    gap: 10,
-    marginTop: 10,
-  },
-  buttonHalf: {
-    flex: 1,
     borderRadius: 12,
     paddingVertical: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-  },
-  appleButtonCustom: {
-    backgroundColor: '#000',
-  },
-  appleIcon: {
-    marginRight: 6,
+    marginTop: 10,
   },
   buttonText: {
     color: '#fff',
@@ -452,6 +434,19 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: 15,
     fontFamily: 'Fredoka_400Regular',
+  },
+  appleButton: {
+    width: '100%',
+    borderRadius: 12,
+    paddingVertical: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  appleButtonText: {
+    // color is set dynamically
   },
   signupButton: {
     width: '100%',

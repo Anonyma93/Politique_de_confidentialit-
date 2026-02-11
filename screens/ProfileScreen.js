@@ -18,29 +18,44 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
-import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
-import WalkthroughTooltip from '../components/WalkthroughTooltip';
+import ScreenGuide from '../components/ScreenGuide';
 import { getCurrentUser, getUserData, updateUserProfile, updatePreferredLines, updatePreferredStations, updateProfilePhoto } from '../services/authService';
 import { lignes } from '../data/lignes';
 import { getStationsByPreferredLines } from '../data/stations';
 import PremiumBadge from '../components/PremiumBadge';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
+import { usePremium } from '../context/PremiumContext';
 
-// Grades et leurs seuils
+// Grades et leurs seuils - Synchronisés avec authService.js
 const GRADES_HIERARCHY = [
-  { name: 'Guide suprême', minScore: 4.01, emoji: '👑', color: '#FFD700' },
-  { name: 'Légende Métropolitaine', minScore: 3.01, emoji: '🏆', color: '#E5E4E2' },
-  { name: 'Ministre du transport', minScore: 2.51, emoji: '🎖️', color: '#CD7F32' },
-  { name: 'Sauveur de ligne', minScore: 2.11, emoji: '🦸', color: '#4CAF50' },
-  { name: 'Dompteur de Navigo', minScore: 1.81, emoji: '🎯', color: '#2196F3' },
-  { name: 'Pro du Strapontin', minScore: 1.51, emoji: '⭐', color: '#9C27B0' },
-  { name: 'Inspecteur Réseau', minScore: 1.21, emoji: '🔍', color: '#FF9800' },
-  { name: 'Contrôleur', minScore: 0.91, emoji: '🎫', color: '#795548' },
-  { name: 'Chef de Quai', minScore: 0.61, emoji: '👷', color: '#607D8B' },
-  { name: 'Agent de Bord', minScore: 0.31, emoji: '👔', color: '#9E9E9E' },
+  { name: 'Guide suprême', minScore: 4.50, emoji: '👑', color: '#FFD700' },
+  { name: 'Légende Métropolitaine', minScore: 3.50, emoji: '🏆', color: '#E5E4E2' },
+  { name: 'Ministre du transport', minScore: 2.80, emoji: '🎖️', color: '#CD7F32' },
+  { name: 'Sauveur de ligne', minScore: 2.30, emoji: '🦸', color: '#4CAF50' },
+  { name: 'Dompteur de Navigo', minScore: 1.80, emoji: '🎯', color: '#2196F3' },
+  { name: 'Pro du Strapontin', minScore: 1.40, emoji: '⭐', color: '#9C27B0' },
+  { name: 'Inspecteur Réseau', minScore: 1.10, emoji: '🔍', color: '#FF9800' },
+  { name: 'Contrôleur', minScore: 0.80, emoji: '🎫', color: '#795548' },
+  { name: 'Chef de Quai', minScore: 0.55, emoji: '👷', color: '#607D8B' },
+  { name: 'Agent de Bord', minScore: 0.30, emoji: '👔', color: '#9E9E9E' },
   { name: 'Touriste', minScore: 0, emoji: '🎒', color: '#BDBDBD' },
 ];
+
+// Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
+const getGradeFromScore = (score) => {
+  if (score >= 4.50) return 'Guide suprême';
+  if (score >= 3.50) return 'Légende Métropolitaine';
+  if (score >= 2.80) return 'Ministre du transport';
+  if (score >= 2.30) return 'Sauveur de ligne';
+  if (score >= 1.80) return 'Dompteur de Navigo';
+  if (score >= 1.40) return 'Pro du Strapontin';
+  if (score >= 1.10) return 'Inspecteur Réseau';
+  if (score >= 0.80) return 'Contrôleur';
+  if (score >= 0.55) return 'Chef de Quai';
+  if (score >= 0.30) return 'Agent de Bord';
+  return 'Touriste';
+};
 
 // Composant bouton animé
 const AnimatedButton = ({ children, onPress, disabled, style }) => {
@@ -129,6 +144,8 @@ const AnimatedLineBadge = ({ ligne, isSelected, onPress }) => {
 
 export default function ProfileScreen() {
   const { theme, fontSize } = useTheme();
+  const { isPremium } = usePremium();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userData, setUserData] = useState(null);
@@ -499,7 +516,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               {/* Badge Premium */}
-              {userData?.isPremium && (
+              {isPremium && (
                 <View style={styles.premiumBadgeContainer}>
                   <PremiumBadge size={32} />
                 </View>
@@ -513,44 +530,37 @@ export default function ProfileScreen() {
             </Text>
 
             {/* Grade de l'utilisateur - Cliquable pour voir la pyramide */}
-            <WalkthroughTooltip
-              stepId={WALKTHROUGH_STEPS.PROFILE.GRADE_BADGE}
-              title="Système de ranking"
-              content="Votre grade dépend de votre score de contribution. Plus vous signalez d'incidents et recevez de likes, plus votre grade augmente. Cliquez pour voir tous les grades disponibles."
-              placement="bottom"
+            <TouchableOpacity
+              style={[
+                styles.gradeBadge,
+                {
+                  backgroundColor: theme.name === 'light' ? '#F5F5F5' : theme.colors.cardBackgroundColor,
+                  borderColor: theme.colors.border
+                }
+              ]}
+              onPress={() => setShowRankingModal(true)}
+              activeOpacity={0.7}
             >
-              <TouchableOpacity
-                style={[
-                  styles.gradeBadge,
-                  {
-                    backgroundColor: theme.name === 'light' ? '#F5F5F5' : theme.colors.cardBackgroundColor,
-                    borderColor: theme.colors.border
-                  }
-                ]}
-                onPress={() => setShowRankingModal(true)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="star"
-                  size={16}
-                  color={theme.name === 'light' ? '#FFD700' : '#FFFFFF'}
-                />
-                <Text style={[
-                  styles.gradeText,
-                  {
-                    fontSize: fontSize.sizes.small,
-                    color: theme.name === 'light' ? '#000000' : '#FFFFFF'
-                  }
-                ]}>
-                  {userData?.grade || 'Touriste'}
-                </Text>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={14}
-                  color={theme.name === 'light' ? '#666666' : '#AAAAAA'}
-                />
-              </TouchableOpacity>
-            </WalkthroughTooltip>
+              <Ionicons
+                name="star"
+                size={16}
+                color={theme.name === 'light' ? '#FFD700' : '#FFFFFF'}
+              />
+              <Text style={[
+                styles.gradeText,
+                {
+                  fontSize: fontSize.sizes.small,
+                  color: theme.name === 'light' ? '#000000' : '#FFFFFF'
+                }
+              ]}>
+                {getGradeFromScore(userData?.userScore || 0)}
+              </Text>
+              <Ionicons
+                name="information-circle-outline"
+                size={14}
+                color={theme.name === 'light' ? '#666666' : '#AAAAAA'}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1167,8 +1177,9 @@ export default function ProfileScreen() {
             {/* Pyramide des grades */}
             <ScrollView style={styles.pyramidContainer} showsVerticalScrollIndicator={false}>
               {GRADES_HIERARCHY.map((grade, index) => {
-                const isCurrentGrade = userData?.grade === grade.name;
                 const userScore = userData?.userScore || 0;
+                const currentGrade = getGradeFromScore(userScore);
+                const isCurrentGrade = currentGrade === grade.name;
                 const nextGrade = GRADES_HIERARCHY[index - 1];
                 const scoreNeeded = nextGrade ? nextGrade.minScore - userScore : 0;
 
@@ -1199,7 +1210,7 @@ export default function ProfileScreen() {
                         ]}>
                           {grade.name}
                         </Text>
-                        {userData?.isPremium && (
+                        {isPremium && (
                           <Text style={[
                             styles.gradeScore,
                             { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }
@@ -1222,7 +1233,7 @@ export default function ProfileScreen() {
                       </View>
                     )}
 
-                    {isCurrentGrade && nextGrade && scoreNeeded > 0 && userData?.isPremium && (
+                    {isCurrentGrade && nextGrade && scoreNeeded > 0 && isPremium && (
                       <View style={[styles.progressInfo, { backgroundColor: theme.colors.background }]}>
                         <Text style={[
                           styles.progressText,
@@ -1239,7 +1250,7 @@ export default function ProfileScreen() {
 
             {/* Footer */}
             <View style={[styles.modalFooter, { borderTopColor: theme.colors.border }]}>
-              {userData?.isPremium ? (
+              {isPremium ? (
                 <Text style={[styles.footerText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
                   Votre score actuel : {userData?.userScore?.toFixed(2) || '0.00'}
                 </Text>
@@ -1255,6 +1266,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      <ScreenGuide screenName="Profile" />
     </View>
   );
 }

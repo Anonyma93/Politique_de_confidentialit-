@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { getCurrentUser } from '../services/authService';
 import {
   getSubscriptionStatus,
@@ -23,11 +25,13 @@ import {
 
 export default function PremiumScreen({ navigation }) {
   const { theme, fontSize } = useTheme();
+  const { refreshPremiumStatus } = usePremium();
   const currentUser = getCurrentUser();
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [products, setProducts] = useState([]);
+  const [currentPackage, setCurrentPackage] = useState(null);
 
   useEffect(() => {
     loadSubscriptionInfo();
@@ -40,35 +44,97 @@ export default function PremiumScreen({ navigation }) {
   const loadSubscriptionInfo = async () => {
     setLoading(true);
 
-    // Initialiser IAP
-    await initializeIAP();
+    try {
+      // Initialiser RevenueCat avec l'userId
+      console.log('🔄 Initialisation RevenueCat...');
+      await initializeIAP(currentUser?.uid);
 
-    // Charger le statut
-    const status = await getSubscriptionStatus(currentUser.uid);
-    setSubscriptionStatus(status);
+      // Charger le statut
+      if (currentUser) {
+        console.log('🔄 Chargement statut subscription...');
+        const status = await getSubscriptionStatus(currentUser.uid);
+        console.log('📊 Statut subscription:', status);
+        setSubscriptionStatus(status);
+      }
 
-    // Charger les produits
-    const productsResult = await getAvailableSubscriptions();
-    if (productsResult.success) {
-      setProducts(productsResult.products);
+      // Charger les produits depuis RevenueCat
+      console.log('🔄 Chargement produits RevenueCat...');
+      const productsResult = await getAvailableSubscriptions();
+      console.log('📦 Produits:', productsResult);
+
+      if (productsResult.success && productsResult.products.length > 0) {
+        setProducts(productsResult.products);
+        // Garder le package pour l'achat
+        if (productsResult.offerings?.availablePackages?.length > 0) {
+          console.log('✅ Package trouvé:', productsResult.offerings.availablePackages[0].identifier);
+          setCurrentPackage(productsResult.offerings.availablePackages[0]);
+        } else {
+          console.log('⚠️ Pas de package disponible dans offerings');
+        }
+      } else {
+        console.log('⚠️ Pas de produits disponibles');
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement subscription info:', error);
     }
 
     setLoading(false);
   };
 
   const handlePurchase = async () => {
+    console.log('🛒 handlePurchase appelé, currentPackage:', currentPackage);
+
+    if (!currentPackage) {
+      // Essayer de recharger les produits
+      console.log('🔄 Tentative de rechargement des produits...');
+      const productsResult = await getAvailableSubscriptions();
+
+      if (productsResult.offerings?.availablePackages?.length > 0) {
+        const pkg = productsResult.offerings.availablePackages[0];
+        setCurrentPackage(pkg);
+        console.log('✅ Package rechargé:', pkg.identifier);
+        // Continuer avec l'achat
+        setPurchasing(true);
+        const result = await purchaseSubscription(currentUser.uid, pkg);
+        if (result.success) {
+          // Rafraîchir le statut premium dans le contexte global
+          await refreshPremiumStatus();
+          Alert.alert(
+            'Abonnement activé !',
+            'Merci pour votre soutien ! Profitez de Lini Premium.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+        } else if (!result.canceled) {
+          Alert.alert('Erreur', result.error || 'Une erreur est survenue.');
+        }
+        setPurchasing(false);
+        return;
+      }
+
+      Alert.alert(
+        'Produit non disponible',
+        'L\'abonnement n\'est pas disponible pour le moment. Veuillez réessayer plus tard.\n\nDétails: ' + JSON.stringify(productsResult, null, 2)
+      );
+      return;
+    }
+
     setPurchasing(true);
 
-    const result = await purchaseSubscription(currentUser.uid);
+    const result = await purchaseSubscription(currentUser.uid, currentPackage);
 
     if (result.success) {
+      // Rafraîchir le statut premium dans le contexte global
+      await refreshPremiumStatus();
       Alert.alert(
         'Abonnement activé !',
-        'Merci pour votre soutien ! Profitez de Lini sans publicité.',
+        'Merci pour votre soutien ! Profitez de Lini Premium.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } else if (!result.canceled) {
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'achat.');
+      Alert.alert(
+        'Erreur',
+        result.error || 'Une erreur est survenue lors de l\'achat. Veuillez réessayer.'
+      );
     }
 
     setPurchasing(false);
@@ -80,6 +146,8 @@ export default function PremiumScreen({ navigation }) {
     const result = await restorePurchases(currentUser.uid);
 
     if (result.success && result.restored) {
+      // Rafraîchir le statut premium dans le contexte global
+      await refreshPremiumStatus();
       Alert.alert('Succès', 'Votre abonnement a été restauré !');
       await loadSubscriptionInfo();
     } else if (result.success) {
@@ -99,12 +167,17 @@ export default function PremiumScreen({ navigation }) {
     );
   }
 
+  // Prix depuis RevenueCat ou valeur par défaut
+  const displayPrice = products.length > 0 ? products[0].price : '2,99 €';
+
   const advantages = [
     { icon: 'close-circle-outline', text: 'Aucune publicité', color: '#FF6B9D' },
     { icon: 'flash-outline', text: 'Expérience fluide et rapide', color: '#8CE9F6' },
     { icon: 'heart-outline', text: 'Soutenez le développement', color: '#F69B4C' },
     { icon: 'shield-checkmark-outline', text: 'Accès complet à toutes les fonctionnalités', color: '#9FFFB4' },
   ];
+
+  const isPremium = subscriptionStatus?.isPremium || subscriptionStatus?.isSubscribed;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -140,25 +213,33 @@ export default function PremiumScreen({ navigation }) {
         {/* Statut actuel */}
         {subscriptionStatus && (
           <View style={[styles.statusCard, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
-            {subscriptionStatus.isSubscribed ? (
+            {isPremium ? (
               <>
                 <Ionicons name="checkmark-circle" size={40} color="#5DD6A0" />
                 <Text style={[styles.statusTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
                   Vous êtes Premium !
                 </Text>
                 <Text style={[styles.statusSubtitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                  Merci pour votre soutien
+                  {subscriptionStatus.isManualPremium ? 'Activé manuellement' : 'Merci pour votre soutien'}
                 </Text>
-              </>
-            ) : subscriptionStatus.isInTrial ? (
-              <>
-                <Ionicons name="timer-outline" size={40} color="#F69B4C" />
-                <Text style={[styles.statusTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-                  Essai gratuit
-                </Text>
-                <Text style={[styles.statusSubtitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                  {subscriptionStatus.trialDaysRemaining} jour{subscriptionStatus.trialDaysRemaining > 1 ? 's' : ''} restant{subscriptionStatus.trialDaysRemaining > 1 ? 's' : ''}
-                </Text>
+                {subscriptionStatus.expiresAt && (
+                  <Text style={[styles.statusSubtitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, marginTop: 4 }]}>
+                    {subscriptionStatus.willRenew ? 'Renouvellement' : 'Expire'} le {new Date(subscriptionStatus.expiresAt).toLocaleDateString('fr-FR')}
+                  </Text>
+                )}
+
+                {/* Bouton pour gérer l'abonnement */}
+                {!subscriptionStatus.isManualPremium && (
+                  <TouchableOpacity
+                    style={[styles.manageButton, { borderColor: theme.colors.border }]}
+                    onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+                  >
+                    <Ionicons name="settings-outline" size={18} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
+                    <Text style={[styles.manageButtonText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                      Gérer mon abonnement
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>
@@ -167,7 +248,7 @@ export default function PremiumScreen({ navigation }) {
                   Version gratuite
                 </Text>
                 <Text style={[styles.statusSubtitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                  Avec publicités
+                  Passez à Premium pour une meilleure expérience
                 </Text>
               </>
             )}
@@ -196,11 +277,11 @@ export default function PremiumScreen({ navigation }) {
         </View>
 
         {/* Prix et abonnement */}
-        {!subscriptionStatus?.isSubscribed && (
+        {!isPremium && (
           <View style={styles.section}>
             <View style={[styles.priceCard, { backgroundColor: '#5DD6A0' }]}>
               <Text style={[styles.priceAmount, { fontSize: fontSize.sizes.title }]}>
-                0,99€
+                {displayPrice}
               </Text>
               <Text style={[styles.priceSubtitle, { fontSize: fontSize.sizes.small }]}>
                 par mois
@@ -243,6 +324,28 @@ export default function PremiumScreen({ navigation }) {
           <Text style={[styles.infoText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
             L'abonnement sera facturé via votre compte App Store. Il se renouvellera automatiquement sauf si vous l'annulez au moins 24h avant la fin de la période en cours.
           </Text>
+
+          <View style={styles.legalLinks}>
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://anonyma93.github.io/Politique_de_confidentialit-/privacy-policy.html')}
+            >
+              <Text style={[styles.legalLinkText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                Politique de confidentialité
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.legalSeparator, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+              {' | '}
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
+            >
+              <Text style={[styles.legalLinkText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                Conditions d'utilisation (EULA)
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -305,6 +408,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusSubtitle: {
+    fontFamily: 'Fredoka_400Regular',
+  },
+  manageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  manageButtonText: {
     fontFamily: 'Fredoka_400Regular',
   },
   section: {
@@ -383,5 +498,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_400Regular',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    flexWrap: 'wrap',
+  },
+  legalLinkText: {
+    fontFamily: 'Fredoka_400Regular',
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    fontFamily: 'Fredoka_400Regular',
   },
 });

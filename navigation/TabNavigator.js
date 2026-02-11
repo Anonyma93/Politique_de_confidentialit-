@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { getCurrentUser } from '../services/authService';
 import { useNotificationListener } from '../hooks/useNotificationListener';
+import { subscribeToUnreadNotifications } from '../services/internalNotificationService';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -95,7 +97,7 @@ const bubbleStyles = StyleSheet.create({
 });
 
 // Composant de tab bar personnalisé avec effet liquid glass
-function CustomTabBar({ state, descriptors, navigation }) {
+function CustomTabBar({ state, descriptors, navigation, unreadCount = 0 }) {
   const glassSupported = isLiquidGlassAvailable();
 
   return (
@@ -193,7 +195,16 @@ function CustomTabBar({ state, descriptors, navigation }) {
                 style={tabBarStyles.tabButton}
                 hitSlop={{ top: 100, bottom: 15, left: 10, right: 10 }}
               >
-                <Ionicons name={iconName} size={26} color={color} />
+                <View style={tabBarStyles.iconContainer}>
+                  <Ionicons name={iconName} size={26} color={color} />
+                  {route.name === 'Feed' && unreadCount > 0 && (
+                    <View style={tabBarStyles.badge}>
+                      <Text style={tabBarStyles.badgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={[tabBarStyles.tabLabel, { color }]}>
                   {label}
                 </Text>
@@ -270,20 +281,83 @@ const tabBarStyles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
+  iconContainer: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -12,
+    backgroundColor: '#FF6B9D',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#FF6B9D',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Fredoka_600SemiBold',
+    fontWeight: 'bold',
+  },
 });
 
 export default function TabNavigator() {
   const { theme, fontSize } = useTheme();
+  const { refreshPremiumStatus } = usePremium();
   const currentUser = getCurrentUser();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Activer l'écoute des notifications
   useNotificationListener(currentUser);
 
+  // Écouter les notifications non lues
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const unsubscribe = subscribeToUnreadNotifications(
+      currentUser.uid,
+      (notifications) => {
+        setUnreadCount(notifications.length);
+      }
+    );
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [currentUser?.uid]);
+
+  // Rafraîchir le statut premium à chaque changement d'onglet
+  const handleTabChange = useCallback(() => {
+    console.log('🔄 Tab changed - refreshing premium status');
+    refreshPremiumStatus();
+  }, [refreshPremiumStatus]);
+
   return (
     <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <CustomTabBar {...props} unreadCount={unreadCount} />}
       screenOptions={{
         headerShown: false,
+      }}
+      screenListeners={{
+        tabPress: handleTabChange,
       }}
     >
       <Tab.Screen

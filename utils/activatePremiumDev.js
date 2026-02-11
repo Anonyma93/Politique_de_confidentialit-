@@ -3,51 +3,56 @@
  * À utiliser temporairement pour activer le premium sur un compte
  *
  * IMPORTANT: Ce fichier ne doit PAS être utilisé en production
+ * Utilise une Cloud Function sécurisée pour modifier le statut premium
  */
 
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { getAuth } from 'firebase/auth';
+
+// URL de la Cloud Function (à mettre à jour avec votre projet ID)
+const CLOUD_FUNCTION_URL = 'https://europe-west1-lini-47633.cloudfunctions.net/managePremium';
 
 /**
  * Active le premium permanent pour un utilisateur
- * @param {string} email - Email de l'utilisateur
+ * @param {string} userEmail - Email de l'utilisateur
  */
-export const activatePremiumForUser = async (email) => {
+export const activatePremiumForUser = async (userEmail) => {
   try {
-    console.log('🔍 Recherche de l\'utilisateur:', email);
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
 
-    // Rechercher l'utilisateur par email
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      console.log('❌ Aucun utilisateur trouvé avec cet email');
-      return { success: false, error: 'Utilisateur non trouvé' };
+    if (!currentUser) {
+      return { success: false, error: 'Vous devez être connecté' };
     }
 
-    const userDoc = querySnapshot.docs[0];
-    const userId = userDoc.id;
-    const userData = userDoc.data();
+    console.log('🔍 Activation du premium pour:', userEmail);
 
-    console.log(`📧 Utilisateur trouvé: ${userData.firstName} ${userData.lastName}`);
-    console.log(`🆔 User ID: ${userId}`);
-
-    // Mettre à jour le statut premium
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      isPremium: true,
-      premiumExpiresAt: null, // Premium permanent
-      updatedAt: new Date().toISOString()
+    // Appeler la Cloud Function
+    const response = await fetch(CLOUD_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        adminEmail: currentUser.email,
+        userEmail: userEmail,
+        action: 'activate'
+      })
     });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Erreur:', result.error);
+      return { success: false, error: result.error || 'Erreur lors de l\'activation' };
+    }
 
     console.log('✅ Premium activé avec succès!');
     console.log('💎 Statut: Premium Permanent');
 
     return {
       success: true,
-      userId,
-      message: 'Premium activé avec succès!'
+      userId: result.userId,
+      message: result.message
     };
 
   } catch (error) {
@@ -58,34 +63,45 @@ export const activatePremiumForUser = async (email) => {
 
 /**
  * Désactive le premium pour un utilisateur (utile pour les tests)
- * @param {string} email - Email de l'utilisateur
+ * @param {string} userEmail - Email de l'utilisateur
  */
-export const deactivatePremiumForUser = async (email) => {
+export const deactivatePremiumForUser = async (userEmail) => {
   try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email));
-    const querySnapshot = await getDocs(q);
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
 
-    if (querySnapshot.empty) {
-      return { success: false, error: 'Utilisateur non trouvé' };
+    if (!currentUser) {
+      return { success: false, error: 'Vous devez être connecté' };
     }
 
-    const userDoc = querySnapshot.docs[0];
-    const userId = userDoc.id;
+    console.log('🔍 Désactivation du premium pour:', userEmail);
 
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      isPremium: false,
-      premiumExpiresAt: null,
-      updatedAt: new Date().toISOString()
+    // Appeler la Cloud Function
+    const response = await fetch(CLOUD_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        adminEmail: currentUser.email,
+        userEmail: userEmail,
+        action: 'deactivate'
+      })
     });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Erreur:', result.error);
+      return { success: false, error: result.error || 'Erreur lors de la désactivation' };
+    }
 
     console.log('✅ Premium désactivé');
 
     return {
       success: true,
-      userId,
-      message: 'Premium désactivé'
+      userId: result.userId,
+      message: result.message
     };
 
   } catch (error) {

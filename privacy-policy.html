@@ -116,7 +116,7 @@
 <body>
     <div class="container">
         <h1>Politique de confidentialité</h1>
-        <p class="last-updated">Dernière mise à jour : 17 janvier 2026</p>
+        <p class="last-updated">Dernière mise à jour : 11 février 2026</p>
 
         <div class="section">
             <p>Bienvenue sur <strong>Lini</strong>, l'application de signalement d'incidents de transport en temps réel. Nous nous engageons à protéger votre vie privée et vos données personnelles conformément au Règlement Général sur la Protection des Données (RGPD) et aux lois françaises applicables.</p>
@@ -152,9 +152,11 @@
 
             <h3>2.3 Données d'utilisation</h3>
             <ul>
-                <li><strong>Préférences utilisateur</strong> : lignes favorites, thème sombre/clair, taille de police</li>
+                <li><strong>Préférences utilisateur</strong> : lignes favorites, stations favorites, ville, thème sombre/clair, taille de police</li>
+                <li><strong>Préférences de notification</strong> : types de notifications activés, plages horaires, jours sélectionnés, niveaux de sévérité, résumé matinal</li>
                 <li><strong>Historique de navigation</strong> : pages consultées dans l'application</li>
-                <li><strong>Notifications push</strong> : token de notification pour l'envoi de notifications</li>
+                <li><strong>Notifications push</strong> : token de notification (Expo Push Token) et plateforme de l'appareil (iOS/Android)</li>
+                <li><strong>Données d'engagement</strong> : nombre de publications, likes reçus et donnés, confirmations, score utilisateur, taux d'engagement et grade attribué</li>
             </ul>
 
             <h3>2.4 Données de paiement (abonnement Premium)</h3>
@@ -204,9 +206,11 @@
 
             <h3>5.2 Avec nos prestataires de services</h3>
             <ul>
-                <li><strong>Firebase (Google)</strong> : hébergement de la base de données et authentification</li>
-                <li><strong>Apple</strong> : gestion des abonnements in-app</li>
-                <li><strong>Expo</strong> : notifications push</li>
+                <li><strong>Firebase (Google)</strong> : hébergement de la base de données (Firestore), authentification (Firebase Auth), stockage de fichiers (Firebase Storage) et exécution de fonctions serveur (Cloud Functions)</li>
+                <li><strong>RevenueCat</strong> : gestion et validation des abonnements in-app, suivi du statut d'abonnement et des transactions</li>
+                <li><strong>Apple</strong> : traitement des paiements via l'App Store et authentification via Sign In with Apple</li>
+                <li><strong>Expo</strong> : notifications push et distribution de l'application</li>
+                <li><strong>Google Fonts</strong> : chargement des polices d'écriture (Fredoka, Poppins) depuis les serveurs de Google</li>
             </ul>
 
             <p>Ces prestataires sont conformes au RGPD et ne peuvent utiliser vos données qu'aux fins spécifiées par nos soins.</p>
@@ -220,8 +224,10 @@
             <ul>
                 <li><strong>Compte actif</strong> : vos données sont conservées tant que votre compte existe</li>
                 <li><strong>Après suppression du compte</strong> : suppression sous 30 jours (sauf obligation légale)</li>
-                <li><strong>Publications</strong> : conservées tant que votre compte existe</li>
+                <li><strong>Publications</strong> : les publications sont automatiquement supprimées chaque jour à 4h00 (heure de Paris) afin de garantir des informations en temps réel. Vos statistiques (nombre de publications, likes, score) sont conservées</li>
+                <li><strong>Commentaires</strong> : conservés tant que la publication associée existe ou jusqu'à suppression par l'auteur</li>
                 <li><strong>Données de facturation</strong> : conservées 10 ans (obligation légale fiscale)</li>
+                <li><strong>Tokens de notification</strong> : conservés tant que votre compte est actif, supprimés à la désinscription de l'appareil</li>
             </ul>
         </div>
 
@@ -260,8 +266,9 @@
             <h2>9. Cookies et technologies similaires</h2>
             <p>L'application utilise :</p>
             <ul>
-                <li><strong>Stockage local (AsyncStorage)</strong> : pour mémoriser vos préférences (thème, taille de police, lignes favorites)</li>
+                <li><strong>Stockage local (AsyncStorage)</strong> : pour mémoriser vos préférences (thème, taille de police, préférences de notification)</li>
                 <li><strong>Tokens de session</strong> : pour maintenir votre connexion</li>
+                <li><strong>Firebase Analytics</strong> : des données d'utilisation anonymisées peuvent être collectées via Firebase pour améliorer le service (identifiant de mesure configuré)</li>
             </ul>
             <p>Aucun cookie de tracking publicitaire n'est utilisé.</p>
         </div>
@@ -277,44 +284,76 @@
         </div>
 
         <div class="section">
-            <h2>11. Notifications push</h2>
-            <p>Vous pouvez recevoir des notifications pour :</p>
+            <h2>11. Connexion via Sign In with Apple</h2>
+            <p>Lini propose la connexion via <strong>Sign In with Apple</strong>. Lorsque vous utilisez cette méthode :</p>
             <ul>
-                <li>Nouveaux incidents sur vos lignes favorites</li>
-                <li>Réponses à vos commentaires</li>
-                <li>Mises à jour importantes de l'application</li>
+                <li>Apple peut vous proposer de <strong>masquer votre adresse email</strong> en utilisant une adresse relais privée (@privaterelay.appleid.com). Dans ce cas, nous n'avons pas accès à votre véritable adresse email</li>
+                <li>Votre <strong>nom</strong> tel que fourni par Apple est utilisé pour créer votre profil</li>
+                <li>Un <strong>identifiant unique Apple</strong> est lié à votre compte Lini</li>
+                <li>Aucun mot de passe n'est stocké dans ce cas, l'authentification étant gérée par Apple</li>
             </ul>
-            <p>Vous pouvez désactiver les notifications à tout moment dans les réglages de votre appareil ou dans l'application.</p>
+            <p>Vous pouvez révoquer l'accès de Lini à votre compte Apple à tout moment dans les réglages de votre appareil (Réglages → Apple ID → Mot de passe et sécurité → Apps utilisant l'identifiant Apple).</p>
         </div>
 
         <div class="section">
-            <h2>12. Abonnement Premium</h2>
-            <p>L'abonnement Premium à 2,99€/mois est géré par Apple App Store. Les paiements sont traités de manière sécurisée par Apple. Nous ne stockons jamais vos informations bancaires.</p>
+            <h2>12. Notifications push</h2>
+            <p><strong>Les notifications push sont une fonctionnalité réservée aux abonnés Premium.</strong> Si vous êtes abonné Premium, vous pouvez recevoir des notifications pour :</p>
+            <ul>
+                <li>Nouveaux incidents sur vos lignes et stations favorites</li>
+                <li>Réponses à vos commentaires</li>
+                <li>Likes et confirmations sur vos publications</li>
+                <li>Résumé matinal et/ou du soir des incidents (configurable)</li>
+                <li>Mises à jour importantes de l'application</li>
+            </ul>
+            <p>Les notifications sont personnalisées en fonction de vos préférences : lignes, stations, niveaux de sévérité, plages horaires et jours de la semaine. Vous pouvez désactiver les notifications à tout moment dans les réglages de votre appareil ou dans l'application.</p>
+        </div>
 
-            <h3>Essai gratuit de 14 jours</h3>
-            <p>Tous les nouveaux utilisateurs bénéficient automatiquement d'un essai gratuit de 14 jours des fonctionnalités Premium, sans engagement.</p>
+        <div class="section">
+            <h2>13. Abonnement Premium</h2>
+            <p>L'abonnement Premium à 2,99€/mois est géré par Apple App Store et validé via <strong>RevenueCat</strong>, notre prestataire de gestion d'abonnements. Les paiements sont traités de manière sécurisée par Apple. Nous ne stockons jamais vos informations bancaires. RevenueCat reçoit un identifiant utilisateur anonyme pour vérifier le statut de votre abonnement.</p>
+
+            <h3>Fonctionnalités Premium</h3>
+            <p>L'abonnement Premium donne accès aux fonctionnalités suivantes :</p>
+            <ul>
+                <li><strong>Notifications push</strong> : alertes en temps réel sur vos lignes et stations favorites</li>
+                <li><strong>Sélection de plusieurs villes</strong> : suivez les incidents dans plusieurs villes simultanément</li>
+                <li><strong>Masquer les noms de famille</strong> : protégez votre vie privée en n'affichant que votre prénom</li>
+                <li><strong>Badge Premium</strong> : badge distinctif affiché sur votre profil</li>
+                <li><strong>Expérience sans publicité</strong> : utilisation de l'application sans interruption</li>
+            </ul>
 
             <h3>Annulation</h3>
             <p>Vous pouvez annuler votre abonnement à tout moment via les réglages de votre compte App Store.</p>
         </div>
 
         <div class="section">
-            <h2>13. Transferts internationaux</h2>
-            <p>Vos données peuvent être transférées et stockées sur des serveurs situés en dehors de l'Union Européenne (notamment via Firebase/Google Cloud). Ces transferts sont effectués conformément au RGPD avec des garanties appropriées (clauses contractuelles types).</p>
+            <h2>14. Profilage et scoring</h2>
+            <p>Lini calcule automatiquement des <strong>statistiques d'engagement</strong> basées sur votre activité :</p>
+            <ul>
+                <li><strong>Score utilisateur</strong> : calculé à partir du nombre de publications, likes reçus et confirmations</li>
+                <li><strong>Taux d'engagement</strong> : ratio entre les likes reçus et les publications</li>
+                <li><strong>Grade</strong> : badge attribué en fonction de votre score (ex. : contributeur, expert)</li>
+            </ul>
+            <p>Ces données sont utilisées uniquement pour valoriser les contributions de la communauté et ne font l'objet d'aucune décision automatisée ayant un effet juridique ou significatif sur vous. Vous pouvez demander des informations sur la logique de ce scoring en nous contactant.</p>
         </div>
 
         <div class="section">
-            <h2>14. Protection des mineurs</h2>
+            <h2>15. Transferts internationaux</h2>
+            <p>Vos données peuvent être transférées et stockées sur des serveurs situés en dehors de l'Union Européenne (notamment via Firebase/Google Cloud et RevenueCat). Ces transferts sont effectués conformément au RGPD avec des garanties appropriées (clauses contractuelles types).</p>
+        </div>
+
+        <div class="section">
+            <h2>16. Protection des mineurs</h2>
             <p>Lini est destiné aux utilisateurs de 13 ans et plus. Si vous avez moins de 18 ans, nous vous recommandons d'obtenir l'autorisation de vos parents avant d'utiliser l'application.</p>
         </div>
 
         <div class="section">
-            <h2>15. Modifications de la politique</h2>
+            <h2>17. Modifications de la politique</h2>
             <p>Nous nous réservons le droit de modifier cette politique de confidentialité. En cas de modification substantielle, vous serez informé via l'application ou par email. La date de dernière mise à jour est indiquée en haut de ce document.</p>
         </div>
 
         <div class="section">
-            <h2>16. Contact et réclamations</h2>
+            <h2>18. Contact et réclamations</h2>
             <p>Pour toute question concernant vos données personnelles :</p>
             <ul>
                 <li><strong>Via l'application</strong> : Options → Support</li>
@@ -329,7 +368,7 @@
         </div>
 
         <div class="section">
-            <h2>17. Suppression du compte</h2>
+            <h2>19. Suppression du compte</h2>
             <p>Vous pouvez supprimer votre compte à tout moment via l'application (Options → Supprimer le compte). Cette action entraînera :</p>
             <ul>
                 <li>La suppression de votre compte et de vos données personnelles</li>

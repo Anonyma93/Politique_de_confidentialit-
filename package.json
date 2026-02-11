@@ -1,6 +1,6 @@
 {
   "name": "lini",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -27,13 +27,14 @@
     "expo-status-bar": "~3.0.8",
     "firebase": "^12.5.0",
     "firebase-tools": "^14.25.0",
+    "js-sha256": "^0.11.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-purchases": "^9.7.6",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.12.1",
-    "react-native-walkthrough-tooltip": "^1.6.0"
+    "react-native-svg": "15.12.1"
   },
   "private": true,
   "devDependencies": {

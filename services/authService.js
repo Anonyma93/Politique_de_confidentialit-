@@ -1,20 +1,21 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithCredential,
-  OAuthProvider,
   signOut,
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
-  deleteUser
+  deleteUser,
+  OAuthProvider,
+  signInWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, deleteDoc, collection, getCountFromServer } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../config/firebase';
 import { parseFirebaseError } from '../utils/firebaseErrors';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { sha256 } from 'js-sha256';
 
 /**
  * Créer un nouveau compte utilisateur
@@ -52,6 +53,7 @@ export const signUp = async (userData) => {
       const firestorePromise = setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: email,
+        displayName: `${firstName} ${lastName}`, // Requis par les règles Firestore
         firstName: firstName,
         lastName: lastName,
         photoURL: photoURL,
@@ -65,7 +67,6 @@ export const signUp = async (userData) => {
         userScore: 0, // Score de notation caché (calculé automatiquement)
         engagementRate: 0, // Taux d'engagement (likes par post)
         walkthroughCompleted: false, // Walkthrough pas encore terminé
-        walkthroughSteps: [], // Aucune étape complétée
         firstLoginDate: new Date().toISOString(), // Pour l'essai gratuit de 14 jours
         isPremium: false, // Statut premium (abonnement payant)
         premiumExpiresAt: null, // Date d'expiration de l'abonnement
@@ -117,6 +118,92 @@ export const signIn = async (email, password) => {
 };
 
 /**
+ * Connexion avec Apple
+ */
+export const signInWithApple = async () => {
+  try {
+    // Générer un nonce aléatoire pour la sécurité
+    const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const hashedNonce = sha256(nonce);
+
+    // Demander les credentials Apple
+    const appleCredential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+
+    // Créer le credential Firebase
+    const provider = new OAuthProvider('apple.com');
+    const credential = provider.credential({
+      idToken: appleCredential.identityToken,
+      rawNonce: nonce,
+    });
+
+    // Se connecter avec Firebase
+    const userCredential = await signInWithCredential(auth, credential);
+    const user = userCredential.user;
+
+    // Vérifier si c'est un nouvel utilisateur
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+      // Nouveau compte - créer le document Firestore
+      const firstName = appleCredential.fullName?.givenName || 'Utilisateur';
+      const lastName = appleCredential.fullName?.familyName || 'Apple';
+      const email = appleCredential.email || user.email || `${user.uid}@privaterelay.appleid.com`;
+
+      // Mettre à jour le profil Firebase Auth
+      await updateProfile(user, {
+        displayName: `${firstName} ${lastName}`,
+      });
+
+      // Créer le document Firestore
+      await setDoc(userDocRef, {
+        uid: user.uid,
+        email: email,
+        displayName: `${firstName} ${lastName}`, // Requis par les règles Firestore
+        firstName: firstName,
+        lastName: lastName,
+        photoURL: null,
+        preferredLines: [],
+        preferredStations: [],
+        cities: ['Paris'],
+        city: 'Paris',
+        grade: 'Touriste',
+        postsCount: 0,
+        likesCount: 0,
+        userScore: 0,
+        engagementRate: 0,
+        walkthroughCompleted: false,
+        firstLoginDate: new Date().toISOString(),
+        isPremium: false,
+        premiumExpiresAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        authProvider: 'apple',
+      });
+
+      return { success: true, user, isNewUser: true };
+    }
+
+    // Utilisateur existant
+    return { success: true, user, isNewUser: false };
+  } catch (error) {
+    console.error('Erreur lors de la connexion avec Apple:', error);
+
+    if (error.code === 'ERR_CANCELED') {
+      return { success: false, error: 'Connexion annulée', canceled: true };
+    }
+
+    return { success: false, error: parseFirebaseError(error) };
+  }
+};
+
+/**
  * Déconnexion
  */
 export const logout = async () => {
@@ -161,8 +248,10 @@ export const changePassword = async (currentPassword, newPassword) => {
 
 /**
  * Supprimer le compte utilisateur
+ * @param {string|null} password - Le mot de passe (null pour les utilisateurs Apple)
+ * @param {boolean} isAppleUser - True si l'utilisateur s'est connecté via Apple
  */
-export const deleteAccount = async (password) => {
+export const deleteAccount = async (password, isAppleUser = false) => {
   try {
     const user = auth.currentUser;
 
@@ -171,7 +260,35 @@ export const deleteAccount = async (password) => {
     }
 
     // Ré-authentifier l'utilisateur (requis pour supprimer le compte)
-    if (user.email && password) {
+    if (isAppleUser) {
+      // Ré-authentification via Apple Sign-In
+      try {
+        const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        const hashedNonce = sha256(nonce);
+
+        const appleCredential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+          nonce: hashedNonce,
+        });
+
+        const provider = new OAuthProvider('apple.com');
+        const credential = provider.credential({
+          idToken: appleCredential.identityToken,
+          rawNonce: nonce,
+        });
+
+        await reauthenticateWithCredential(user, credential);
+      } catch (appleError) {
+        if (appleError.code === 'ERR_CANCELED') {
+          return { success: false, error: 'Authentification annulée', canceled: true };
+        }
+        throw appleError;
+      }
+    } else if (user.email && password) {
+      // Ré-authentification via mot de passe
       const credential = EmailAuthProvider.credential(user.email, password);
       await reauthenticateWithCredential(user, credential);
     }
@@ -210,133 +327,6 @@ export const deleteAccount = async (password) => {
  */
 export const getCurrentUser = () => {
   return auth.currentUser;
-};
-
-/**
- * Connexion avec Apple
- */
-export const signInWithApple = async () => {
-  try {
-    // 1. Demander l'authentification Apple
-    const appleCredential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-      ],
-    });
-
-    // 2. Créer un credential Firebase avec le token Apple
-    const { identityToken } = appleCredential;
-    const provider = new OAuthProvider('apple.com');
-    const credential = provider.credential({
-      idToken: identityToken,
-    });
-
-    // 3. Se connecter à Firebase avec le credential Apple
-    const userCredential = await signInWithCredential(auth, credential);
-    const user = userCredential.user;
-
-    // 4. Vérifier si c'est un nouvel utilisateur
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const isNewUser = !userDoc.exists();
-
-    if (isNewUser) {
-      // Nouvel utilisateur - créer le profil dans Firestore avec infos minimales
-      const firstName = appleCredential.fullName?.givenName || '';
-      const lastName = appleCredential.fullName?.familyName || '';
-      const email = user.email || appleCredential.email || '';
-
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        email: email,
-        firstName: firstName,
-        lastName: lastName,
-        photoURL: user.photoURL || null,
-        preferredLines: [],
-        preferredStations: [],
-        cities: ['Paris'], // Tableau de villes
-        city: 'Paris', // Pour rétro-compatibilité
-        grade: 'Touriste', // Grade par défaut pour les nouveaux utilisateurs
-        postsCount: 0, // Nombre de posts créés
-        likesCount: 0, // Nombre de likes reçus
-        userScore: 0, // Score de notation caché (calculé automatiquement)
-        engagementRate: 0, // Taux d'engagement (likes par post)
-        firstLoginDate: new Date().toISOString(), // Pour l'essai gratuit de 14 jours
-        isPremium: false, // Statut premium (abonnement payant)
-        premiumExpiresAt: null, // Date d'expiration de l'abonnement
-        authProvider: 'apple',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-
-      // Mettre à jour le displayName si on a le nom
-      if (firstName || lastName) {
-        await updateProfile(user, {
-          displayName: `${firstName} ${lastName}`.trim(),
-        });
-      }
-
-      // Retourner les données pour l'onboarding
-      return {
-        success: true,
-        user,
-        isNewUser: true,
-        profileIncomplete: true,
-        userData: {
-          email,
-          firstName,
-          lastName,
-          photoURL: user.photoURL || null,
-        }
-      };
-    }
-
-    // Utilisateur existant - vérifier si le profil est complet
-    const userData = userDoc.data();
-    const profileIncomplete = !userData.preferredLines?.length && !userData.preferredStations?.length;
-
-    return {
-      success: true,
-      user,
-      isNewUser: false,
-      profileIncomplete,
-      userData: profileIncomplete ? {
-        email: userData.email,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        photoURL: userData.photoURL,
-      } : null
-    };
-  } catch (error) {
-    console.error('Erreur lors de la connexion Apple:', error);
-
-    // Gérer l'annulation par l'utilisateur
-    if (error.code === 'ERR_REQUEST_CANCELED') {
-      return { success: false, error: 'Connexion annulée', canceled: true };
-    }
-
-    // Gérer le cas où Apple n'est pas configuré dans Firebase
-    if (error.code === 'auth/operation-not-allowed') {
-      return {
-        success: false,
-        error: 'Sign in with Apple n\'est pas encore configuré. Utilisez Email/Password pour le moment.',
-        notConfigured: true
-      };
-    }
-
-    return { success: false, error: parseFirebaseError(error) };
-  }
-};
-
-/**
- * Vérifier si Sign in with Apple est disponible
- */
-export const isAppleAuthAvailable = async () => {
-  try {
-    return await AppleAuthentication.isAvailableAsync();
-  } catch (error) {
-    return false;
-  }
 };
 
 /**
@@ -393,12 +383,55 @@ export const updateUserProfile = async (updates) => {
       return { success: false, error: 'Utilisateur non connecté' };
     }
 
-    // Mettre à jour Firestore
     const userRef = doc(db, 'users', user.uid);
-    await setDoc(userRef, {
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+
+    // Vérifier si le document existe
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      // Le document n'existe pas - le créer avec les champs requis
+      const displayName = user.displayName || `${updates.firstName || 'Utilisateur'} ${updates.lastName || ''}`.trim();
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: displayName,
+        firstName: updates.firstName || user.displayName?.split(' ')[0] || 'Utilisateur',
+        lastName: updates.lastName || user.displayName?.split(' ').slice(1).join(' ') || '',
+        photoURL: user.photoURL || null,
+        preferredLines: [],
+        preferredStations: [],
+        cities: ['Paris'],
+        city: 'Paris',
+        grade: 'Touriste',
+        postsCount: 0,
+        likesCount: 0,
+        userScore: 0,
+        engagementRate: 0,
+        walkthroughCompleted: false,
+        firstLoginDate: new Date().toISOString(),
+        isPremium: false,
+        premiumExpiresAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...updates,
+      });
+    } else {
+      // Le document existe - mise à jour normale
+      const updateData = {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Mettre à jour aussi displayName si firstName ou lastName changent
+      if (updates.firstName || updates.lastName) {
+        const currentData = userDoc.data();
+        const firstName = updates.firstName || currentData.firstName || '';
+        const lastName = updates.lastName || currentData.lastName || '';
+        updateData.displayName = `${firstName} ${lastName}`.trim();
+      }
+
+      await setDoc(userRef, updateData, { merge: true });
+    }
 
     // Mettre à jour le displayName dans Firebase Auth si firstName ou lastName changent
     if (updates.firstName || updates.lastName) {
@@ -744,23 +777,29 @@ export const calculateUserScore = async (userId = null) => {
     // Calculer l'engagement rate (likes moyens par post)
     const engagementRate = postsCount > 0 ? likesCount / postsCount : 0;
 
-    // Calculer le bonus d'activité (logarithmique pour éviter l'explosion)
-    const activityBonus = Math.log(postsCount + 1);
+    // Calculer le bonus d'activité (logarithmique)
+    // Coefficient de 0.35 pour une progression plus lente
+    const activityBonus = Math.log(postsCount + 1) * 0.35;
 
     // Calculer le bonus d'implication (likes donnés)
-    // Logarithmique aussi pour éviter l'abus, avec un poids plus faible que les posts
-    const involvementBonus = Math.log(likesGiven + 1) * 0.3;
+    // Coefficient de 0.35 pour équilibrer avec l'activité
+    const involvementBonus = Math.log(likesGiven + 1) * 0.35;
+
+    // Bonus de base pour les utilisateurs actifs (réduit pour ralentir la progression initiale)
+    const baseBonus = postsCount > 0 ? 0.25 : 0;
 
     // Obtenir le nombre total d'utilisateurs pour la normalisation
     const totalUsersResult = await getTotalUsersCount();
     const totalUsers = totalUsersResult.count || 1;
 
-    // Score de base : engagement × (1 + activité + implication)
-    const baseScore = engagementRate * (1 + activityBonus + involvementBonus);
+    // Score de base : engagement × (1 + activité + implication) + bonus de base
+    const baseScore = (engagementRate * (1 + activityBonus + involvementBonus)) + baseBonus;
 
-    // Normalisation par la racine carrée du nombre d'utilisateurs
-    // (plus il y a d'utilisateurs, plus il est difficile d'avoir un score élevé)
-    const normalizedScore = baseScore / Math.sqrt(totalUsers);
+    // Normalisation BEAUCOUP moins punitive
+    // Au lieu de diviser par sqrt(totalUsers), on divise par log(totalUsers + 1)
+    // Cela réduit drastiquement la pénalité liée au nombre d'utilisateurs
+    const normalizationFactor = Math.max(1, Math.log(totalUsers + 1) / 2);
+    const normalizedScore = baseScore / normalizationFactor;
 
     // Arrondir à 2 décimales
     const userScore = Math.round(normalizedScore * 100) / 100;
@@ -788,33 +827,33 @@ export const calculateUserScore = async (userId = null) => {
 /**
  * Déterminer le grade en fonction du score
  *
- * Ordre des grades (du pire au meilleur) :
- * 1. Touriste (0.00 - 0.30)
- * 2. Agent de Bord (0.31 - 0.60)
- * 3. Chef de Quai (0.61 - 0.90)
- * 4. Contrôleur (0.91 - 1.20)
- * 5. Inspecteur Réseau (1.21 - 1.50)
- * 6. Pro du Strapontin (1.51 - 1.80)
- * 7. Dompteur de Navigo (1.81 - 2.10)
- * 8. Sauveur de ligne (2.11 - 2.50)
- * 9. Ministre du transport (2.51 - 3.00)
- * 10. Légende Métropolitaine (3.01 - 4.00)
- * 11. Guide suprême (4.01+)
+ * Ordre des grades (du pire au meilleur) - Seuils ajustés pour une progression plus progressive :
+ * 1. Touriste (0.00 - 0.29)
+ * 2. Agent de Bord (0.30 - 0.54)
+ * 3. Chef de Quai (0.55 - 0.79)
+ * 4. Contrôleur (0.80 - 1.09)
+ * 5. Inspecteur Réseau (1.10 - 1.39)
+ * 6. Pro du Strapontin (1.40 - 1.79)
+ * 7. Dompteur de Navigo (1.80 - 2.29)
+ * 8. Sauveur de ligne (2.30 - 2.79)
+ * 9. Ministre du transport (2.80 - 3.49)
+ * 10. Légende Métropolitaine (3.50 - 4.49)
+ * 11. Guide suprême (4.50+)
  *
  * @param {number} score - Le score de l'utilisateur
  * @returns {string} - Le grade correspondant
  */
 export const getGradeFromScore = (score) => {
-  if (score >= 4.01) return 'Guide suprême';
-  if (score >= 3.01) return 'Légende Métropolitaine';
-  if (score >= 2.51) return 'Ministre du transport';
-  if (score >= 2.11) return 'Sauveur de ligne';
-  if (score >= 1.81) return 'Dompteur de Navigo';
-  if (score >= 1.51) return 'Pro du Strapontin';
-  if (score >= 1.21) return 'Inspecteur Réseau';
-  if (score >= 0.91) return 'Contrôleur';
-  if (score >= 0.61) return 'Chef de Quai';
-  if (score >= 0.31) return 'Agent de Bord';
+  if (score >= 4.50) return 'Guide suprême';
+  if (score >= 3.50) return 'Légende Métropolitaine';
+  if (score >= 2.80) return 'Ministre du transport';
+  if (score >= 2.30) return 'Sauveur de ligne';
+  if (score >= 1.80) return 'Dompteur de Navigo';
+  if (score >= 1.40) return 'Pro du Strapontin';
+  if (score >= 1.10) return 'Inspecteur Réseau';
+  if (score >= 0.80) return 'Contrôleur';
+  if (score >= 0.55) return 'Chef de Quai';
+  if (score >= 0.30) return 'Agent de Bord';
   return 'Touriste';
 };
 

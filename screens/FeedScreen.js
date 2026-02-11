@@ -10,27 +10,44 @@ import {
   RefreshControl,
   Animated,
   Image,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
-import WalkthroughTooltip from '../components/WalkthroughTooltip';
+import ScreenGuide from '../components/ScreenGuide';
 import { lignes } from '../data/lignes';
 import { getCurrentUser, getUserData, incrementLikesCount, decrementLikesCount, incrementLikesGiven, decrementLikesGiven } from '../services/authService';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { setBadgeCount } from '../services/notificationService';
+import { notifyLike, notifyConfirmation, markAllNotificationsAsRead } from '../services/internalNotificationService';
 import PremiumBadge from '../components/PremiumBadge';
 import CommentsModal from '../components/CommentsModal';
+import AnimatedMetroRefresh from '../components/AnimatedMetroRefresh';
+import { formatUserName } from '../utils/formatUserName';
+import { useResponsive } from '../utils/responsive';
+import { usePremium } from '../context/PremiumContext';
 
 // Composant de post animé
-const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfirm, onOpenComments, getSeverityColor, navigation, showDetailsTooltip = false }) => {
+const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfirm, onOpenComments, getSeverityColor, navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Fonction helper pour formater le nom d'utilisateur
+  const getFormattedUserName = (displayName, postUserId, userHideLastNames) => {
+    if (!displayName) return 'Utilisateur';
+
+    // Séparer le prénom et le nom
+    const nameParts = displayName.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    return formatUserName(firstName, lastName, userHideLastNames, postUserId, currentUser?.uid);
+  };
 
   useEffect(() => {
     // Si pas de photo (avatar par défaut), considérer comme chargé
@@ -99,6 +116,28 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
         return 'Interrompu';
       default:
         return '';
+    }
+  };
+
+  // Obtenir le label de durée estimée
+  const getDurationLabel = (duration) => {
+    switch (duration) {
+      case '15min':
+        return '15 min';
+      case '30min':
+        return '30 min';
+      case '1h':
+        return '1 heure';
+      case '2h':
+        return '2 heures';
+      case 'half_day':
+        return 'Demi-journée';
+      case 'full_day':
+        return 'Journée';
+      case 'unknown':
+        return 'Durée inconnue';
+      default:
+        return null;
     }
   };
 
@@ -207,7 +246,7 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
               activeOpacity={isOwnPost ? 1 : 0.7}
             >
               <Text style={[styles.userName, { color: theme.colors.text, fontSize: fontSize.sizes.body, marginTop: 8 }]}>
-                {post.userDisplayName || 'Utilisateur'}
+                {getFormattedUserName(post.userDisplayName, post.userId, post.userHideLastNames)}
                 {isOwnPost && (
                   <Text style={{ color: theme.colors.iconActive }}> (Vous)</Text>
                 )}
@@ -256,74 +295,55 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
                   {post.incident}
                 </Text>
               </View>
+
+              {/* Badge durée estimée */}
+              {post.estimatedDuration && getDurationLabel(post.estimatedDuration) && (
+                <View style={[
+                  styles.badge,
+                  {
+                    backgroundColor: theme.colors.navbar,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                  }
+                ]}>
+                  <Ionicons name="time-outline" size={12} color={theme.colors.textSecondary} />
+                  <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>
+                    {getDurationLabel(post.estimatedDuration)}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
 
         {/* Section Commentaire */}
-        {showDetailsTooltip ? (
-          <WalkthroughTooltip
-            stepId={WALKTHROUGH_STEPS.FEED.POST_DETAILS}
-            title="Comprendre un post"
-            content="Chaque post affiche : la ligne (en haut à gauche), la destination et l'arrêt concernés, la gravité de l'incident (qu'on peut retrouver avec la couleur de la bordure du post), le motif de l'incident, un commentaire pour expliquer en détail le post et un bouton like pour indiquer que vous validez celui-ci."
-            placement="bottom"
-            previousStepId={WALKTHROUGH_STEPS.FEED.USER_PROFILE_CLICK}
-          >
-            <View style={styles.commentSection}>
-              <View style={styles.commentHeader}>
-                <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
-                <Text style={[styles.commentTitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                  Commentaire
-                </Text>
-                <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
-              </View>
-              <Text style={[styles.postComment, { color: theme.colors.text, fontSize: fontSize.sizes.body, textAlign: 'center' }]}>
-                {post.comment}
-              </Text>
-              <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
-                {formatDate(post.createdAt)}
-              </Text>
-
-              {/* Bouton commentaires */}
-              <TouchableOpacity
-                style={[styles.commentsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                onPress={() => onOpenComments(post)}
-              >
-                <Ionicons name="chatbubble-outline" size={18} color={theme.colors.iconActive} />
-                <Text style={[styles.commentsButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-                  {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </WalkthroughTooltip>
-        ) : (
-          <View style={styles.commentSection}>
-            <View style={styles.commentHeader}>
-              <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
-              <Text style={[styles.commentTitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                Commentaire
-              </Text>
-              <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
-            </View>
-            <Text style={[styles.postComment, { color: theme.colors.text, fontSize: fontSize.sizes.body, textAlign: 'center' }]}>
-              {post.comment}
+        <View style={styles.commentSection}>
+          <View style={styles.commentHeader}>
+            <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
+            <Text style={[styles.commentTitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+              Commentaire
             </Text>
-            <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
-              {formatDate(post.createdAt)}
-            </Text>
-
-            {/* Bouton commentaires */}
-            <TouchableOpacity
-              style={[styles.commentsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-              onPress={() => onOpenComments(post)}
-            >
-              <Ionicons name="chatbubble-outline" size={18} color={theme.colors.iconActive} />
-              <Text style={[styles.commentsButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-                {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
-              </Text>
-            </TouchableOpacity>
+            <View style={[styles.commentTopBorder, { borderTopColor: '#E0E0E0' }]} />
           </View>
-        )}
+          <Text style={[styles.postComment, { color: theme.colors.text, fontSize: fontSize.sizes.body, textAlign: 'center' }]}>
+            {post.comment}
+          </Text>
+          <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
+            {formatDate(post.createdAt)}
+          </Text>
+
+          {/* Bouton commentaires */}
+          <TouchableOpacity
+            style={[styles.commentsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+            onPress={() => onOpenComments(post)}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color={theme.colors.iconActive} />
+            <Text style={[styles.commentsButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Animated.View>
   );
@@ -331,6 +351,9 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
 
 export default function FeedScreen({ navigation }) {
   const { theme, fontSize } = useTheme();
+  const { isTablet, maxContentWidth } = useResponsive();
+  const { isPremium, refreshPremiumStatus } = usePremium();
+
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -353,6 +376,7 @@ export default function FeedScreen({ navigation }) {
   const [userPreferredLines, setUserPreferredLines] = useState([]);
   const [userPreferredStations, setUserPreferredStations] = useState([]);
   const [userCities, setUserCities] = useState(['Paris']); // Villes sélectionnées par l'utilisateur
+  const [adModalVisible, setAdModalVisible] = useState(false);
 
   // Filtres rapides basés sur les préférences
   const [quickFilterLines, setQuickFilterLines] = useState(false);
@@ -377,23 +401,66 @@ export default function FeedScreen({ navigation }) {
           if (result.success) {
             setUserPreferredLines(result.data.preferredLines || []);
             setUserPreferredStations(result.data.preferredStations || []);
+
             // Charger les villes sélectionnées (array) ou city (string pour rétro-compatibilité)
-            const cities = result.data.cities || (result.data.city ? [result.data.city] : ['Paris']);
+            let cities = result.data.cities || (result.data.city ? [result.data.city] : ['Paris']);
+
+            // Si l'utilisateur n'est plus Premium mais a plusieurs villes, garder uniquement la première
+            if (!isPremium && cities.length > 1) {
+              cities = [cities[0]];
+              // Mettre à jour Firestore
+              await updateDoc(doc(db, 'users', currentUser.uid), {
+                cities: cities,
+                city: cities[0]
+              });
+              console.log('🏙️ Villes réduites à une seule (fin abonnement):', cities);
+            }
+
             console.log('🏙️ Villes chargées dans FeedScreen:', cities);
             setUserCities(cities);
+
+            // Afficher la pub si non premium
+            if (!isPremium) {
+              setAdModalVisible(true);
+            }
           }
         }
       };
       loadUserPreferences();
-    }, [currentUser])
+    }, [currentUser, isPremium])
   );
 
   // Reset le badge count quand l'utilisateur arrive sur la page Feed
   useFocusEffect(
     React.useCallback(() => {
       setBadgeCount(0);
-    }, [])
+
+      // Marquer toutes les notifications internes comme lues
+      if (currentUser?.uid) {
+        markAllNotificationsAsRead(currentUser.uid);
+      }
+    }, [currentUser?.uid])
   );
+
+  // Réagir aux changements de statut premium (géré par PremiumContext)
+  useEffect(() => {
+    const handlePremiumChange = async () => {
+      if (currentUser) {
+        // Si plus premium et plusieurs villes, réduire à une
+        if (!isPremium && userCities.length > 1) {
+          const firstCity = [userCities[0]];
+          setUserCities(firstCity);
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            cities: firstCity,
+            city: firstCity[0]
+          });
+          console.log('🏙️ Villes réduites à une seule (fin abonnement):', firstCity);
+        }
+      }
+    };
+
+    handlePremiumChange();
+  }, [isPremium, currentUser, userCities]);
 
   // Scroller vers le haut quand on arrive sur la page
   useFocusEffect(
@@ -462,6 +529,15 @@ export default function FeedScreen({ navigation }) {
         await incrementLikesCount(post.userId);
         // Incrémenter les likes donnés par l'utilisateur courant
         await incrementLikesGiven(currentUser.uid);
+
+        // Créer une notification pour l'auteur du post
+        await notifyLike(
+          post.userId,
+          currentUser.uid,
+          currentUser.displayName || 'Un utilisateur',
+          currentUser.photoURL,
+          post.id
+        );
       }
     } catch (error) {
       console.error('Erreur lors du like:', error);
@@ -491,6 +567,15 @@ export default function FeedScreen({ navigation }) {
           confirmationsCount: (post.confirmationsCount || 0) + 1,
           confirmedBy: arrayUnion(currentUser.uid),
         });
+
+        // Créer une notification pour l'auteur du post
+        await notifyConfirmation(
+          post.userId,
+          currentUser.uid,
+          currentUser.displayName || 'Un utilisateur',
+          currentUser.photoURL,
+          post.id
+        );
       }
     } catch (error) {
       console.error('Erreur lors de la confirmation:', error);
@@ -654,39 +739,19 @@ export default function FeedScreen({ navigation }) {
   };
 
   // Rendu d'un post
-  const renderPost = ({ item: post, index }) => {
-    const postCard = (
-      <AnimatedPostCard
-        post={post}
-        theme={theme}
-        fontSize={fontSize}
-        currentUser={currentUser}
-        onLike={handleLike}
-        onConfirm={handleConfirm}
-        onOpenComments={handleOpenComments}
-        getSeverityColor={getSeverityColor}
-        navigation={navigation}
-        showDetailsTooltip={index === 0}
-      />
-    );
-
-    // Ajouter le tooltip du profil uniquement sur le premier post
-    if (index === 0) {
-      return (
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.FEED.USER_PROFILE_CLICK}
-          title="Voir le profil"
-          content="Cliquez sur le nom ou la photo d'un post pour voir le profil de l'utilisateur et ses statistiques."
-          placement="top"
-          previousStepId={WALKTHROUGH_STEPS.FEED.FILTER_BUTTONS}
-        >
-          {postCard}
-        </WalkthroughTooltip>
-      );
-    }
-
-    return postCard;
-  };
+  const renderPost = ({ item: post }) => (
+    <AnimatedPostCard
+      post={post}
+      theme={theme}
+      fontSize={fontSize}
+      currentUser={currentUser}
+      onLike={handleLike}
+      onConfirm={handleConfirm}
+      onOpenComments={handleOpenComments}
+      getSeverityColor={getSeverityColor}
+      navigation={navigation}
+    />
+  );
 
   if (loading) {
     return (
@@ -1002,117 +1067,102 @@ export default function FeedScreen({ navigation }) {
       {/* Filtres rapides basés sur les préférences utilisateur */}
       {(userPreferredLines.length > 0 || userPreferredStations.length > 0) && (
         <View style={[styles.quickFiltersContainer, { backgroundColor: theme.colors.background }]}>
-          <WalkthroughTooltip
-            stepId={WALKTHROUGH_STEPS.FEED.FILTER_BUTTONS}
-            title="Filtres rapides"
-            content="Utilisez ces filtres pour voir rapidement les incidents sur vos lignes et arrêts préférés. Cliquez sur 'Les deux' pour filtrer par lignes ET arrêts en même temps."
-            placement="bottom"
-          >
-            <View style={styles.quickFiltersRow}>
-              {userPreferredLines.length > 0 && (
-                <TouchableOpacity
-                  style={[
-                    styles.quickFilterBadge,
-                    {
-                      backgroundColor: quickFilterLines ? theme.colors.primary : theme.colors.navbar,
-                      borderColor: quickFilterLines ? theme.colors.primary : theme.colors.border,
-                    }
-                  ]}
-                  onPress={handleQuickFilterLines}
-                >
-                  <Ionicons
-                    name="train"
-                    size={18}
-                    color={quickFilterLines ? theme.colors.iconActive : theme.colors.iconActive}
-                  />
-                  <Text style={[
-                    styles.quickFilterText,
-                    {
-                      color: quickFilterLines ? theme.colors.iconActive : theme.colors.text,
-                      fontSize: fontSize.sizes.small
-                    }
-                  ]}>
-                    Mes lignes
-                  </Text>
-                </TouchableOpacity>
-              )}
+          <View style={styles.quickFiltersRow}>
+            {userPreferredLines.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.quickFilterBadge,
+                  {
+                    backgroundColor: quickFilterLines ? theme.colors.primary : theme.colors.navbar,
+                    borderColor: quickFilterLines ? theme.colors.primary : theme.colors.border,
+                  }
+                ]}
+                onPress={handleQuickFilterLines}
+              >
+                <Ionicons
+                  name="train"
+                  size={18}
+                  color={quickFilterLines ? theme.colors.iconActive : theme.colors.iconActive}
+                />
+                <Text style={[
+                  styles.quickFilterText,
+                  {
+                    color: quickFilterLines ? theme.colors.iconActive : theme.colors.text,
+                    fontSize: fontSize.sizes.small
+                  }
+                ]}>
+                  Mes lignes
+                </Text>
+              </TouchableOpacity>
+            )}
 
-              {userPreferredStations.length > 0 && (
-                <TouchableOpacity
-                  style={[
-                    styles.quickFilterBadge,
-                    {
-                      backgroundColor: quickFilterStations ? theme.colors.primary : theme.colors.navbar,
-                      borderColor: quickFilterStations ? theme.colors.primary : theme.colors.border,
-                    }
-                  ]}
-                  onPress={handleQuickFilterStations}
-                >
-                  <Ionicons
-                    name="location"
-                    size={18}
-                    color={quickFilterStations ? theme.colors.iconActive : theme.colors.iconActive}
-                  />
-                  <Text style={[
-                    styles.quickFilterText,
-                    {
-                      color: quickFilterStations ? theme.colors.iconActive : theme.colors.text,
-                      fontSize: fontSize.sizes.small
-                    }
-                  ]}>
-                    Mes arrêts
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {userPreferredStations.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.quickFilterBadge,
+                  {
+                    backgroundColor: quickFilterStations ? theme.colors.primary : theme.colors.navbar,
+                    borderColor: quickFilterStations ? theme.colors.primary : theme.colors.border,
+                  }
+                ]}
+                onPress={handleQuickFilterStations}
+              >
+                <Ionicons
+                  name="location"
+                  size={18}
+                  color={quickFilterStations ? theme.colors.iconActive : theme.colors.iconActive}
+                />
+                <Text style={[
+                  styles.quickFilterText,
+                  {
+                    color: quickFilterStations ? theme.colors.iconActive : theme.colors.text,
+                    fontSize: fontSize.sizes.small
+                  }
+                ]}>
+                  Mes arrêts
+                </Text>
+              </TouchableOpacity>
+            )}
 
-              {userPreferredLines.length > 0 && userPreferredStations.length > 0 && (
-                <TouchableOpacity
-                  style={[
-                    styles.quickFilterBadge,
-                    {
-                      backgroundColor: quickFilterBoth ? theme.colors.primary : theme.colors.navbar,
-                      borderColor: quickFilterBoth ? theme.colors.primary : theme.colors.border,
-                    }
-                  ]}
-                  onPress={handleQuickFilterBoth}
-                >
-                  <Ionicons
-                    name="star"
-                    size={18}
-                    color={quickFilterBoth ? theme.colors.iconActive : theme.colors.iconActive}
-                  />
-                  <Text style={[
-                    styles.quickFilterText,
-                    {
-                      color: quickFilterBoth ? theme.colors.iconActive : theme.colors.text,
-                      fontSize: fontSize.sizes.small
-                    }
-                  ]}>
-                    Les deux
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </WalkthroughTooltip>
+            {userPreferredLines.length > 0 && userPreferredStations.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.quickFilterBadge,
+                  {
+                    backgroundColor: quickFilterBoth ? theme.colors.primary : theme.colors.navbar,
+                    borderColor: quickFilterBoth ? theme.colors.primary : theme.colors.border,
+                  }
+                ]}
+                onPress={handleQuickFilterBoth}
+              >
+                <Ionicons
+                  name="star"
+                  size={18}
+                  color={quickFilterBoth ? theme.colors.iconActive : theme.colors.iconActive}
+                />
+                <Text style={[
+                  styles.quickFilterText,
+                  {
+                    color: quickFilterBoth ? theme.colors.iconActive : theme.colors.text,
+                    fontSize: fontSize.sizes.small
+                  }
+                ]}>
+                  Les deux
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
       {/* Information réinitialisation */}
       <View style={[styles.resetInfoContainer, { backgroundColor: theme.colors.navbar }]}>
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.FEED.RESET_INFO}
-          title="Réinitialisation quotidienne"
-          content="Tous les posts sont automatiquement supprimés chaque jour à 4h00 du matin pour garantir que seules les informations récentes et pertinentes sont affichées."
-          placement="bottom"
-          previousStepId={WALKTHROUGH_STEPS.FEED.POST_DETAILS}
-        >
-          <View style={styles.resetInfoContent}>
-            <Ionicons name="information-circle-outline" size={16} color={theme.colors.iconActive} />
-            <Text style={[styles.resetInfoText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-              Les posts sont réinitialisés quotidiennement à 4h00
-            </Text>
-          </View>
-        </WalkthroughTooltip>
+        <View style={styles.resetInfoContent}>
+          <Ionicons name="information-circle-outline" size={16} color={theme.colors.iconActive} />
+          <Text style={[styles.resetInfoText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+            Les posts sont réinitialisés quotidiennement à 4h00
+          </Text>
+        </View>
       </View>
 
       {/* Liste des posts */}
@@ -1134,12 +1184,19 @@ export default function FeedScreen({ navigation }) {
           data={filteredPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isTablet && { alignSelf: 'center', maxWidth: maxContentWidth }
+          ]}
+          ListHeaderComponent={
+            <AnimatedMetroRefresh refreshing={refreshing} theme={theme} />
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor={theme.colors.iconActive}
+              tintColor="transparent"
+              colors={['transparent']}
             />
           }
         />
@@ -1150,7 +1207,60 @@ export default function FeedScreen({ navigation }) {
         visible={commentsModalVisible}
         onClose={handleCloseComments}
         post={selectedPost}
+        navigation={navigation}
       />
+
+      {/* Modal de publicité pour utilisateurs non-premium */}
+      <Modal
+        visible={adModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setAdModalVisible(false)}
+      >
+        <View style={styles.adModalOverlay}>
+          <View style={[styles.adModalContent, { backgroundColor: theme.colors.background }]}>
+            {/* Icône Premium */}
+            <View style={styles.adIconContainer}>
+              <Ionicons name="diamond" size={60} color="#FFD700" />
+            </View>
+
+            {/* Titre */}
+            <Text style={[styles.adTitle, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
+              Profitez de Lini sans publicité
+            </Text>
+
+            {/* Description */}
+            <Text style={[styles.adDescription, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
+              Passez à Lini Premium pour seulement 2,99€/mois et profitez d'une expérience sans interruption
+            </Text>
+
+            {/* Boutons */}
+            <View style={styles.adButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.adButtonPremium, { backgroundColor: '#FFD700' }]}
+                onPress={() => {
+                  setAdModalVisible(false);
+                  navigation.navigate('Premium');
+                }}
+              >
+                <Text style={[styles.adButtonPremiumText, { fontSize: fontSize.sizes.body }]}>
+                  Devenir Premium
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.adButtonClose, { backgroundColor: theme.colors.navbar, borderColor: theme.colors.border }]}
+                onPress={() => setAdModalVisible(false)}
+              >
+                <Text style={[styles.adButtonCloseText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Continuer sans Premium
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <ScreenGuide screenName="Feed" />
     </View>
   );
 }
@@ -1469,12 +1579,13 @@ const styles = StyleSheet.create({
   quickFiltersRow: {
     flexDirection: 'row',
     gap: 10,
-    flexWrap: 'wrap',
   },
   quickFilterBadge: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 20,
     gap: 6,
@@ -1504,5 +1615,55 @@ const styles = StyleSheet.create({
   resetInfoText: {
     fontFamily: 'Fredoka_400Regular',
     textAlign: 'center',
+  },
+  adModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  adModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+  },
+  adIconContainer: {
+    marginBottom: 20,
+  },
+  adTitle: {
+    fontFamily: 'Fredoka_600SemiBold',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  adDescription: {
+    fontFamily: 'Fredoka_400Regular',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  adButtonsContainer: {
+    width: '100%',
+    gap: 12,
+  },
+  adButtonPremium: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  adButtonPremiumText: {
+    color: '#000',
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  adButtonClose: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  adButtonCloseText: {
+    fontFamily: 'Fredoka_500Medium',
   },
 });

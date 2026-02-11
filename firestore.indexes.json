@@ -15,12 +15,38 @@
       ]
     },
     {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipientId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "preferredLines",
-          "arrayConfig": "CONTAINS"
+          "fieldPath": "morningSummaryEnabled",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "morningSummaryHour",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "notificationsEnabled",
+          "order": "ASCENDING"
         }
       ]
     }

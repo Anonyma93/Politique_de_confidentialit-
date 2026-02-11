@@ -10,16 +10,34 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { getUserData } from '../services/authService';
+import { getUserData, getCurrentUser } from '../services/authService';
 import { lignes } from '../data/lignes';
+import { formatUserName } from '../utils/formatUserName';
+
+// Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
+const getGradeFromScore = (score) => {
+  if (score >= 4.50) return 'Guide suprême';
+  if (score >= 3.50) return 'Légende Métropolitaine';
+  if (score >= 2.80) return 'Ministre du transport';
+  if (score >= 2.30) return 'Sauveur de ligne';
+  if (score >= 1.80) return 'Dompteur de Navigo';
+  if (score >= 1.40) return 'Pro du Strapontin';
+  if (score >= 1.10) return 'Inspecteur Réseau';
+  if (score >= 0.80) return 'Contrôleur';
+  if (score >= 0.55) return 'Chef de Quai';
+  if (score >= 0.30) return 'Agent de Bord';
+  return 'Touriste';
+};
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params;
   const { theme, fontSize } = useTheme();
+  const currentUser = getCurrentUser();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [selectedLines, setSelectedLines] = useState([]);
   const [selectedStations, setSelectedStations] = useState([]);
+  const [hideLastNames, setHideLastNames] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -30,6 +48,7 @@ export default function UserProfileScreen({ route, navigation }) {
     const result = await getUserData(userId);
     if (result.success) {
       setUserData(result.data);
+      setHideLastNames(result.data.hideLastNames || false);
 
       // Charger les lignes préférées
       if (Array.isArray(result.data.preferredLines)) {
@@ -45,6 +64,7 @@ export default function UserProfileScreen({ route, navigation }) {
         setSelectedStations(result.data.preferredStations.split(',').map(s => s.trim()).filter(s => s));
       }
     }
+
     setLoading(false);
   };
 
@@ -113,7 +133,7 @@ export default function UserProfileScreen({ route, navigation }) {
 
             <View style={styles.nameSection}>
               <Text style={[styles.displayName, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
-                {userData?.firstName} {userData?.lastName}
+                {formatUserName(userData?.firstName || '', userData?.lastName || '', hideLastNames, userId, currentUser?.uid)}
               </Text>
 
               {/* Grade de l'utilisateur */}
@@ -137,7 +157,7 @@ export default function UserProfileScreen({ route, navigation }) {
                     color: theme.name === 'light' ? '#000000' : '#FFFFFF'
                   }
                 ]}>
-                  {userData?.grade || 'Touriste'}
+                  {getGradeFromScore(userData?.userScore || 0)}
                 </Text>
               </View>
             </View>
@@ -200,21 +220,23 @@ export default function UserProfileScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Nom de famille */}
-          <View style={[styles.fieldCard, { backgroundColor: theme.colors.post }]}>
-            <View style={[styles.fieldIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-              <Ionicons name="person-circle-outline" size={22} color="#fff" />
+          {/* Nom de famille - masqué si hideLastNames est activé */}
+          {!hideLastNames && (
+            <View style={[styles.fieldCard, { backgroundColor: theme.colors.post }]}>
+              <View style={[styles.fieldIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
+                <Ionicons name="person-circle-outline" size={22} color="#fff" />
+              </View>
+              <View style={styles.fieldDivider} />
+              <View style={styles.fieldContent}>
+                <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                  Nom de famille
+                </Text>
+                <Text style={[styles.fieldValue, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  {userData?.lastName}
+                </Text>
+              </View>
             </View>
-            <View style={styles.fieldDivider} />
-            <View style={styles.fieldContent}>
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                Nom de famille
-              </Text>
-              <Text style={[styles.fieldValue, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
-                {userData?.lastName}
-              </Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Lignes préférées */}

@@ -3,14 +3,17 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from './context/ThemeContext';
-import { WalkthroughProvider } from './context/WalkthroughContext';
+import { ScreenGuideProvider } from './context/ScreenGuideContext';
+import { PremiumProvider } from './context/PremiumContext';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
 import { ActivityIndicator, View, Text } from 'react-native';
 import { initializeAds } from './services/adService';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './config/firebase';
+import { auth, db } from './config/firebase';
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import * as Notifications from 'expo-notifications';
+import { updateBadgeForPreferredLines } from './services/badgeService';
 
 // Gestionnaire d'erreurs global
 ErrorUtils.setGlobalHandler((error, isFatal) => {
@@ -72,10 +75,10 @@ export default function App() {
 
     return () => {
       if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
+        notificationListener.current.remove();
       }
       if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
     };
   }, []);
@@ -99,6 +102,63 @@ export default function App() {
     }
   }, [initializing]);
 
+  // Écouter les posts en temps réel pour mettre à jour le badge des lignes favorites
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    console.log('🔔 App: Configuration du badge listener pour les lignes favorites');
+
+    let postsUnsubscribe = null;
+    let preferredLines = [];
+
+    // Charger les lignes préférées de l'utilisateur
+    const loadPreferredLines = async () => {
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          preferredLines = userData.preferredLines || [];
+          console.log('🚇 App: Lignes préférées chargées:', preferredLines);
+        }
+      } catch (error) {
+        console.error('❌ App: Erreur lors du chargement des lignes préférées:', error);
+      }
+    };
+
+    // Écouter les posts en temps réel
+    const setupPostsListener = async () => {
+      await loadPreferredLines();
+
+      const postsQuery = query(
+        collection(db, 'posts'),
+        orderBy('createdAt', 'desc')
+      );
+
+      postsUnsubscribe = onSnapshot(postsQuery, async (snapshot) => {
+        const posts = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        // Mettre à jour le badge avec le nombre de posts sur les lignes favorites
+        if (preferredLines.length > 0) {
+          await updateBadgeForPreferredLines(posts, preferredLines);
+        }
+      });
+    };
+
+    setupPostsListener();
+
+    return () => {
+      if (postsUnsubscribe) {
+        postsUnsubscribe();
+      }
+    };
+  }, [user]);
+
   if (!fontsLoaded || initializing) {
     console.log('⏳ App: Chargement... Fonts:', fontsLoaded, 'Initializing:', initializing);
     return (
@@ -112,8 +172,9 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <WalkthroughProvider>
-        <NavigationContainer>
+      <PremiumProvider>
+        <ScreenGuideProvider>
+          <NavigationContainer>
           <StatusBar style="auto" />
           <Stack.Navigator initialRouteName={user ? "Main" : "Login"}>
             {user ? (
@@ -180,8 +241,9 @@ export default function App() {
               </>
             )}
           </Stack.Navigator>
-        </NavigationContainer>
-      </WalkthroughProvider>
+          </NavigationContainer>
+        </ScreenGuideProvider>
+      </PremiumProvider>
     </ThemeProvider>
   );
 }

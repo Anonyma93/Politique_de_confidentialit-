@@ -13,12 +13,13 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme, fontSizes } from '../context/ThemeContext';
-import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
-import WalkthroughTooltip from '../components/WalkthroughTooltip';
+import { useScreenGuide } from '../context/ScreenGuideContext';
+import ScreenGuide from '../components/ScreenGuide';
 import { logout, changePassword, deleteAccount, getCurrentUser } from '../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
@@ -27,11 +28,14 @@ import { requestNotificationPermissions } from '../services/notificationService'
 import { LinearGradient } from 'expo-linear-gradient';
 import { activatePremiumForUser, deactivatePremiumForUser } from '../utils/activatePremiumDev';
 import PremiumBadge from '../components/PremiumBadge';
+import { usePremium } from '../context/PremiumContext';
 
 export default function OptionScreen() {
   const { theme, changeTheme, fontSize, changeFontSize, customColor, setCustomColor } = useTheme();
-  const { resetWalkthrough } = useWalkthrough();
+  const { resetGuides } = useScreenGuide();
   const navigation = useNavigation();
+  const { isPremium, refreshPremiumStatus } = usePremium();
+
   const [loading, setLoading] = useState(false);
   const currentUser = getCurrentUser();
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -52,14 +56,28 @@ export default function OptionScreen() {
 
   // États pour les notifications
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationType, setNotificationType] = useState('both'); // 'lines', 'stations', 'both'
   const [selectedSeverities, setSelectedSeverities] = useState(['perturbe', 'tres_perturbe', 'interrompu']);
   const [selectedDays, setSelectedDays] = useState([1, 2, 3, 4, 5]); // Lundi à Vendredi par défaut
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(18);
 
+  // États pour le récapitulatif matinal
+  const [morningSummaryEnabled, setMorningSummaryEnabled] = useState(false);
+  const [morningSummaryHour, setMorningSummaryHour] = useState(7);
+
+  // États pour le récapitulatif du soir
+  const [eveningSummaryEnabled, setEveningSummaryEnabled] = useState(false);
+  const [eveningSummaryHour, setEveningSummaryHour] = useState(18);
+
   // État pour la ville
   const [selectedCities, setSelectedCities] = useState(['Paris']);
-  const [isPremium, setIsPremium] = useState(false);
+
+  // État pour masquer les noms de famille
+  const [hideLastNames, setHideLastNames] = useState(false);
+
+  // État pour le type d'authentification (Apple ou email/password)
+  const [isAppleUser, setIsAppleUser] = useState(false);
 
   // États pour la section admin
   const [userEmail, setUserEmail] = useState('');
@@ -189,6 +207,7 @@ export default function OptionScreen() {
   const loadPreferences = async () => {
       try {
         const enabled = await AsyncStorage.getItem('notificationsEnabled');
+        const notifType = await AsyncStorage.getItem('notificationType');
         const severities = await AsyncStorage.getItem('selectedSeverities');
         const days = await AsyncStorage.getItem('selectedDays');
         const start = await AsyncStorage.getItem('startHour');
@@ -196,6 +215,9 @@ export default function OptionScreen() {
 
         if (enabled !== null) {
           setNotificationsEnabled(enabled === 'true');
+        }
+        if (notifType !== null) {
+          setNotificationType(notifType);
         }
         if (severities !== null) {
           setSelectedSeverities(JSON.parse(severities));
@@ -210,7 +232,7 @@ export default function OptionScreen() {
           setEndHour(parseInt(end));
         }
 
-        // Charger la ville et le statut premium depuis Firestore
+        // Charger la ville et les préférences depuis Firestore
         if (currentUser) {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
@@ -221,22 +243,38 @@ export default function OptionScreen() {
             setUserEmail(email);
             setIsAdmin(email === 'quentinmichaud93460@hotmail.fr');
 
-            // Charger le statut premium
-            const premiumStatus = userData.isPremium || false;
-            setIsPremium(premiumStatus);
+            // Charger la préférence hideLastNames
+            const hideNames = userData.hideLastNames || false;
+            setHideLastNames(hideNames);
 
-            // Si l'utilisateur n'est pas Premium et a le thème custom, basculer vers normal
-            if (!premiumStatus && theme.name === 'custom') {
-              changeTheme('normal');
+            // Charger les préférences du récapitulatif matinal
+            if (userData.morningSummaryEnabled !== undefined) {
+              setMorningSummaryEnabled(userData.morningSummaryEnabled);
+            }
+            if (userData.morningSummaryHour !== undefined) {
+              setMorningSummaryHour(userData.morningSummaryHour);
+            }
+
+            // Charger les préférences du récapitulatif du soir
+            if (userData.eveningSummaryEnabled !== undefined) {
+              setEveningSummaryEnabled(userData.eveningSummaryEnabled);
+            }
+            if (userData.eveningSummaryHour !== undefined) {
+              setEveningSummaryHour(userData.eveningSummaryHour);
             }
 
             // Charger les villes (nouveau format tableau ou ancien format string)
+            let userCities = [];
             if (userData.cities && Array.isArray(userData.cities)) {
-              setSelectedCities(userData.cities);
+              userCities = userData.cities;
             } else if (userData.city) {
               // Migration de l'ancien format
-              setSelectedCities([userData.city]);
+              userCities = [userData.city];
             }
+            setSelectedCities(userCities);
+
+            // Vérifier si l'utilisateur s'est connecté via Apple
+            setIsAppleUser(userData.authProvider === 'apple');
           }
         }
       } catch (error) {
@@ -249,6 +287,56 @@ export default function OptionScreen() {
     loadPreferences();
   }, [currentUser]);
 
+  // Réagir aux changements de statut premium (géré par PremiumContext)
+  useEffect(() => {
+    console.log('💎 OptionScreen: isPremium changed to:', isPremium);
+
+    const handlePremiumChange = async () => {
+      if (!currentUser) return;
+
+      // Si l'utilisateur n'est pas Premium et a le thème custom, basculer vers normal
+      if (!isPremium && theme.name === 'custom') {
+        console.log('🎨 Basculement thème custom -> normal');
+        changeTheme('normal');
+      }
+
+      // Si l'utilisateur n'est plus Premium mais a hideLastNames activé, le désactiver
+      if (!isPremium && hideLastNames) {
+        setHideLastNames(false);
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          hideLastNames: false
+        });
+      }
+
+      // Si l'utilisateur n'est plus Premium mais a un récapitulatif activé, le désactiver
+      if (!isPremium && morningSummaryEnabled) {
+        setMorningSummaryEnabled(false);
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          morningSummaryEnabled: false
+        });
+      }
+      if (!isPremium && eveningSummaryEnabled) {
+        setEveningSummaryEnabled(false);
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          eveningSummaryEnabled: false
+        });
+      }
+
+      // Si l'utilisateur n'est plus Premium mais a plusieurs villes, garder uniquement la première
+      if (!isPremium && selectedCities.length > 1) {
+        const firstCity = [selectedCities[0]];
+        setSelectedCities(firstCity);
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          cities: firstCity,
+          city: firstCity[0]
+        });
+        console.log('🏙️ Villes réduites à une seule (fin abonnement):', firstCity);
+      }
+    };
+
+    handlePremiumChange();
+  }, [isPremium, currentUser]);
+
   // Scroller vers le haut quand on arrive sur la page
   useFocusEffect(
     React.useCallback(() => {
@@ -257,9 +345,10 @@ export default function OptionScreen() {
   );
 
   // Sauvegarder les préférences de notifications
-  const saveNotificationPreferences = async (enabled, severities, days, start, end) => {
+  const saveNotificationPreferences = async (enabled, notifType, severities, days, start, end) => {
     try {
       await AsyncStorage.setItem('notificationsEnabled', enabled.toString());
+      await AsyncStorage.setItem('notificationType', notifType);
       await AsyncStorage.setItem('selectedSeverities', JSON.stringify(severities));
       await AsyncStorage.setItem('selectedDays', JSON.stringify(days));
       await AsyncStorage.setItem('startHour', start.toString());
@@ -270,6 +359,7 @@ export default function OptionScreen() {
         const userRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userRef, {
           notificationsEnabled: enabled,
+          notificationType: notifType,
           selectedSeverities: severities,
           selectedDays: days,
           startHour: start,
@@ -296,7 +386,7 @@ export default function OptionScreen() {
     }
 
     setNotificationsEnabled(value);
-    await saveNotificationPreferences(value, selectedSeverities, selectedDays, startHour, endHour);
+    await saveNotificationPreferences(value, notificationType, selectedSeverities, selectedDays, startHour, endHour);
   };
 
   // Gérer le changement des niveaux de gravité
@@ -313,7 +403,13 @@ export default function OptionScreen() {
       newSeverities = [...selectedSeverities, severity];
     }
     setSelectedSeverities(newSeverities);
-    await saveNotificationPreferences(notificationsEnabled, newSeverities, selectedDays, startHour, endHour);
+    await saveNotificationPreferences(notificationsEnabled, notificationType, newSeverities, selectedDays, startHour, endHour);
+  };
+
+  // Gérer le changement du type de notification
+  const handleNotificationTypeChange = async (type) => {
+    setNotificationType(type);
+    await saveNotificationPreferences(notificationsEnabled, type, selectedSeverities, selectedDays, startHour, endHour);
   };
 
   // Gérer le changement des jours
@@ -330,19 +426,97 @@ export default function OptionScreen() {
       newDays = [...selectedDays, day];
     }
     setSelectedDays(newDays);
-    await saveNotificationPreferences(notificationsEnabled, selectedSeverities, newDays, startHour, endHour);
+    await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, newDays, startHour, endHour);
   };
 
   // Gérer le changement de l'heure de début
   const handleStartHourChange = async (hour) => {
     setStartHour(hour);
-    await saveNotificationPreferences(notificationsEnabled, selectedSeverities, selectedDays, hour, endHour);
+    await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, selectedDays, hour, endHour);
   };
 
   // Gérer le changement de l'heure de fin
   const handleEndHourChange = async (hour) => {
     setEndHour(hour);
-    await saveNotificationPreferences(notificationsEnabled, selectedSeverities, selectedDays, startHour, hour);
+    await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, selectedDays, startHour, hour);
+  };
+
+  // Gérer le changement du récapitulatif matinal
+  const handleMorningSummaryToggle = async (value) => {
+    try {
+      setMorningSummaryEnabled(value);
+
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          morningSummaryEnabled: value,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log('✅ Récapitulatif matinal:', value ? 'activé' : 'désactivé');
+      }
+    } catch (error) {
+      console.error('Error updating morning summary:', error);
+      setMorningSummaryEnabled(!value);
+      Alert.alert('Erreur', 'Impossible de mettre à jour cette préférence');
+    }
+  };
+
+  // Gérer le changement de l'heure du récapitulatif matinal
+  const handleMorningSummaryHourChange = async (hour) => {
+    try {
+      setMorningSummaryHour(hour);
+
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          morningSummaryHour: hour,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log('✅ Heure du récapitulatif matinal:', hour);
+      }
+    } catch (error) {
+      console.error('Error updating morning summary hour:', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour l\'heure');
+    }
+  };
+
+  // Gérer le changement du récapitulatif du soir
+  const handleEveningSummaryToggle = async (value) => {
+    try {
+      setEveningSummaryEnabled(value);
+
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          eveningSummaryEnabled: value,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log('✅ Récapitulatif du soir:', value ? 'activé' : 'désactivé');
+      }
+    } catch (error) {
+      console.error('Error updating evening summary:', error);
+      setEveningSummaryEnabled(!value);
+      Alert.alert('Erreur', 'Impossible de mettre à jour cette préférence');
+    }
+  };
+
+  // Gérer le changement de l'heure du récapitulatif du soir
+  const handleEveningSummaryHourChange = async (hour) => {
+    try {
+      setEveningSummaryHour(hour);
+
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          eveningSummaryHour: hour,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log('✅ Heure du récapitulatif du soir:', hour);
+      }
+    } catch (error) {
+      console.error('Error updating evening summary hour:', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour l\'heure');
+    }
   };
 
   // Gérer le changement de ville
@@ -406,6 +580,26 @@ export default function OptionScreen() {
     } catch (error) {
       console.error('Error updating city:', error);
       Alert.alert('Erreur', 'Impossible de mettre à jour la ville');
+    }
+  };
+
+  // Toggle pour masquer les noms de famille
+  const handleHideLastNamesToggle = async (value) => {
+    try {
+      setHideLastNames(value);
+
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          hideLastNames: value,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log('✅ Préférence hideLastNames mise à jour:', value);
+      }
+    } catch (error) {
+      console.error('Error updating hideLastNames:', error);
+      setHideLastNames(!value);
+      Alert.alert('Erreur', 'Impossible de mettre à jour cette préférence');
     }
   };
 
@@ -482,12 +676,9 @@ export default function OptionScreen() {
         {
           text: 'Lancer',
           onPress: async () => {
-            await resetWalkthrough();
-            Alert.alert(
-              'Tutoriel activé',
-              'Le tutoriel va maintenant s\'afficher sur les différentes pages de l\'application.',
-              [{ text: 'OK' }]
-            );
+            await resetGuides();
+            // Naviguer vers l'accueil pour démarrer le tutoriel
+            navigation.navigate('Main', { screen: 'Home' });
           },
         },
       ]
@@ -547,51 +738,83 @@ export default function OptionScreen() {
 
   // Gérer la suppression du compte
   const handleDeleteAccount = () => {
+    const confirmationMessage = isAppleUser
+      ? 'Cette action est irréversible. Vous devrez vous authentifier avec Apple pour confirmer la suppression.'
+      : 'Cette action est irréversible. Êtes-vous absolument sûr de vouloir supprimer votre compte ?';
+
     Alert.alert(
       'Supprimer le compte',
-      'Cette action est irréversible. Êtes-vous absolument sûr de vouloir supprimer votre compte ?',
+      confirmationMessage,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
           style: 'destructive',
-          onPress: () => {
-            // Demander le mot de passe pour confirmation
-            Alert.prompt(
-              'Confirmation',
-              'Entrez votre mot de passe pour confirmer la suppression',
-              async (password) => {
-                if (!password) {
-                  Alert.alert('Erreur', 'Mot de passe requis');
-                  return;
-                }
+          onPress: async () => {
+            if (isAppleUser) {
+              // Pour les utilisateurs Apple, pas besoin de mot de passe
+              // La ré-authentification se fait via Apple Sign-In
+              setLoading(true);
+              const result = await deleteAccount(null, true);
+              setLoading(false);
 
-                setLoading(true);
-                const result = await deleteAccount(password);
-                setLoading(false);
-
-                if (result.success) {
-                  Alert.alert(
-                    'Compte supprimé',
-                    'Votre compte a été supprimé avec succès',
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Login' }],
-                          });
-                        },
+              if (result.success) {
+                Alert.alert(
+                  'Compte supprimé',
+                  'Votre compte a été supprimé avec succès',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        navigation.reset({
+                          index: 0,
+                          routes: [{ name: 'Login' }],
+                        });
                       },
-                    ]
-                  );
-                } else {
-                  Alert.alert('Erreur', result.error || 'Erreur lors de la suppression du compte');
-                }
-              },
-              'secure-text'
-            );
+                    },
+                  ]
+                );
+              } else if (!result.canceled) {
+                Alert.alert('Erreur', result.error || 'Erreur lors de la suppression du compte');
+              }
+            } else {
+              // Pour les utilisateurs email/password, demander le mot de passe
+              Alert.prompt(
+                'Confirmation',
+                'Entrez votre mot de passe pour confirmer la suppression',
+                async (password) => {
+                  if (!password) {
+                    Alert.alert('Erreur', 'Mot de passe requis');
+                    return;
+                  }
+
+                  setLoading(true);
+                  const result = await deleteAccount(password, false);
+                  setLoading(false);
+
+                  if (result.success) {
+                    Alert.alert(
+                      'Compte supprimé',
+                      'Votre compte a été supprimé avec succès',
+                      [
+                        {
+                          text: 'OK',
+                          onPress: () => {
+                            navigation.reset({
+                              index: 0,
+                              routes: [{ name: 'Login' }],
+                            });
+                          },
+                        },
+                      ]
+                    );
+                  } else {
+                    Alert.alert('Erreur', result.error || 'Erreur lors de la suppression du compte');
+                  }
+                },
+                'secure-text'
+              );
+            }
           },
         },
       ]
@@ -647,38 +870,21 @@ export default function OptionScreen() {
 
       {/* Introduction */}
       <View style={[styles.section, { marginBottom: 0 }]} ref={introRef}>
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.SETTINGS.INTRODUCTION}
-          title="Paramètres de l'application"
-          content="Personnalisez votre expérience : changez le thème, la taille du texte, configurez vos notifications et gérez votre compte. Toutes vos préférences sont sauvegardées automatiquement."
-          placement="bottom"
-          onShow={() => scrollToTooltip(introRef)}
-        >
-          <View style={styles.introContainer}>
-            <Ionicons name="settings-outline" size={20} color={theme.colors.iconActive} />
-            <Text style={[styles.introText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-              Personnalisez votre application selon vos préférences
-            </Text>
-          </View>
-        </WalkthroughTooltip>
+        <View style={styles.introContainer}>
+          <Ionicons name="settings-outline" size={20} color={theme.colors.iconActive} />
+          <Text style={[styles.introText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+            Personnalisez votre application selon vos préférences
+          </Text>
+        </View>
       </View>
 
       <View style={styles.section}>
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.SETTINGS.THEME_MODE}
-          title="Changer le thème"
-          content="Choisissez entre le mode clair, normal ou sombre selon votre préférence. Le thème s'applique immédiatement à toute l'application."
-          placement="bottom"
-          previousStepId={WALKTHROUGH_STEPS.SETTINGS.INTRODUCTION}
-          onShow={() => scrollToTooltip(themeRef)}
-        >
-          <View style={styles.sectionTitleContainer} ref={themeRef}>
-            <View style={styles.titleAccent} />
-            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-              Apparence
-            </Text>
-          </View>
-        </WalkthroughTooltip>
+        <View style={styles.sectionTitleContainer} ref={themeRef}>
+          <View style={styles.titleAccent} />
+          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+            Apparence
+          </Text>
+        </View>
 
         <View style={styles.modernThemeContainer}>
           {allThemeOptions.map((option) => {
@@ -842,7 +1048,7 @@ export default function OptionScreen() {
           </Text>
         </View>
 
-        <View style={styles.modernThemeContainer}>
+        <View style={[styles.modernThemeContainer, { flexWrap: 'wrap' }]}>
           <TouchableOpacity
             style={[
               styles.modernThemeCard,
@@ -992,6 +1198,401 @@ export default function OptionScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Bordeaux') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Bordeaux')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Bordeaux') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="wine-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Bordeaux') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Bordeaux') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Bordeaux
+            </Text>
+            {selectedCities.includes('Bordeaux') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Marseille') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Marseille')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Marseille') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="boat-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Marseille') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Marseille') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Marseille
+            </Text>
+            {selectedCities.includes('Marseille') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Lille') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Lille')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Lille') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="flower-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Lille') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Lille') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Lille
+            </Text>
+            {selectedCities.includes('Lille') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Nantes') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Nantes')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Nantes') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="leaf-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Nantes') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Nantes') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Nantes
+            </Text>
+            {selectedCities.includes('Nantes') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Rennes') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Rennes')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Rennes') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="shield-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Rennes') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Rennes') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Rennes
+            </Text>
+            {selectedCities.includes('Rennes') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Nice') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Nice')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Nice') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="sunny-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Nice') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Nice') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Nice
+            </Text>
+            {selectedCities.includes('Nice') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Montpellier') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Montpellier')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Montpellier') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="water-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Montpellier') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Montpellier') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Montpellier
+            </Text>
+            {selectedCities.includes('Montpellier') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Strasbourg') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Strasbourg')}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: selectedCities.includes('Strasbourg') ? theme.colors.background : theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="star-outline"
+                size={28}
+                color={theme.colors.iconActive}
+                style={{ opacity: selectedCities.includes('Strasbourg') ? 1 : 0.5 }}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Strasbourg') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Strasbourg
+            </Text>
+            {selectedCities.includes('Strasbourg') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: theme.colors.post,
+                borderColor: theme.colors.border,
+                opacity: 0.5,
+              }
+            ]}
+          >
+            <View style={[
+              styles.modernThemeIconContainer,
+              {
+                backgroundColor: theme.colors.background,
+              }
+            ]}>
+              <Ionicons
+                name="add-circle-outline"
+                size={28}
+                color={theme.colors.textSecondary}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: theme.colors.textSecondary,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Bientôt...
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -999,47 +1600,203 @@ export default function OptionScreen() {
       <View style={styles.section}>
         <View style={styles.sectionTitleContainer}>
           <View style={styles.titleAccent} />
-          <WalkthroughTooltip
-            stepId={WALKTHROUGH_STEPS.SETTINGS.NOTIFICATIONS}
-            title="Notifications"
-            content="Recevez des alertes en temps réel pour les incidents sur vos lignes préférées. Personnalisez les gravités, jours et horaires."
-            placement="top"
-            previousStepId={WALKTHROUGH_STEPS.SETTINGS.THEME_MODE}
-            onShow={() => scrollToTooltip(notificationsRef, 300)}
-          >
-            <View ref={notificationsRef}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-                Notifications
+          <View ref={notificationsRef}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              Notifications
+            </Text>
+          </View>
+        </View>
+
+        {/* Activer les notifications (Premium uniquement) */}
+        {isPremium ? (
+          <View style={[styles.notificationOption, { backgroundColor: notificationsEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5' }]}>
+            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
+              <Ionicons name="notifications" size={22} color="#fff" />
+            </View>
+            <View style={styles.notificationDivider} />
+            <View style={styles.notificationContent}>
+              <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Activer les notifications
+              </Text>
+              <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                Recevez des alertes pour les incidents
               </Text>
             </View>
-          </WalkthroughTooltip>
-        </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleNotificationsToggle}
+              trackColor={{ false: theme.colors.border, true: '#4CD964' }}
+              thumbColor="#fff"
+              style={{ alignSelf: 'center' }}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.accountOption,
+              { backgroundColor: theme.colors.post, borderColor: '#FFD700', opacity: 0.6 }
+            ]}
+            onPress={() => navigation.navigate('Premium')}
+          >
+            <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
+              <Ionicons name="notifications" size={22} color="#fff" />
+            </View>
+            <View style={styles.accountDivider} />
+            <View style={styles.accountContent}>
+              <Text style={[styles.accountLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Activer les notifications
+              </Text>
+            </View>
+            <View style={{ position: 'relative' }}>
+              <Ionicons name="diamond" size={24} color="#FFD700" />
+            </View>
+          </TouchableOpacity>
+        )}
 
-        {/* Activer les notifications */}
-        <View style={[styles.notificationOption, { backgroundColor: notificationsEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5' }]}>
-          <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-            <Ionicons name="notifications" size={22} color="#fff" />
-          </View>
-          <View style={styles.notificationDivider} />
-          <View style={styles.notificationContent}>
-            <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
-              Notifications pour votre ligne
+        {/* Type de notifications */}
+        {notificationsEnabled && isPremium && (
+          <View style={styles.severityContainer}>
+            <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              Recevoir des alertes pour
             </Text>
-            <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-              Recevez des alertes pour les incidents
-            </Text>
+            <View style={styles.modernThemeContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.modernThemeCard,
+                  {
+                    backgroundColor: notificationType === 'lines' ? theme.colors.primary : theme.colors.post,
+                    borderColor: theme.colors.border,
+                  }
+                ]}
+                onPress={() => handleNotificationTypeChange('lines')}
+              >
+                <View style={[
+                  styles.modernThemeIconContainer,
+                  {
+                    backgroundColor: notificationType === 'lines' ? theme.colors.background : theme.colors.background,
+                  }
+                ]}>
+                  <Ionicons
+                    name="train"
+                    size={28}
+                    color={notificationType === 'lines' ? theme.colors.iconActive : theme.colors.iconInactive}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.modernThemeLabel,
+                    {
+                      color: notificationType === 'lines' ? theme.colors.text : theme.colors.text,
+                      fontSize: fontSize.sizes.small,
+                    }
+                  ]}
+                >
+                  Mes lignes
+                </Text>
+                {notificationType === 'lines' && (
+                  <View style={styles.modernCheckmarkContainer}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={theme.colors.iconActive}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modernThemeCard,
+                  {
+                    backgroundColor: notificationType === 'stations' ? theme.colors.primary : theme.colors.post,
+                    borderColor: theme.colors.border,
+                  }
+                ]}
+                onPress={() => handleNotificationTypeChange('stations')}
+              >
+                <View style={[
+                  styles.modernThemeIconContainer,
+                  {
+                    backgroundColor: notificationType === 'stations' ? theme.colors.background : theme.colors.background,
+                  }
+                ]}>
+                  <Ionicons
+                    name="location"
+                    size={28}
+                    color={notificationType === 'stations' ? theme.colors.iconActive : theme.colors.iconInactive}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.modernThemeLabel,
+                    {
+                      color: notificationType === 'stations' ? theme.colors.text : theme.colors.text,
+                      fontSize: fontSize.sizes.small,
+                    }
+                  ]}
+                >
+                  Mes stations
+                </Text>
+                {notificationType === 'stations' && (
+                  <View style={styles.modernCheckmarkContainer}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={theme.colors.iconActive}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modernThemeCard,
+                  {
+                    backgroundColor: notificationType === 'both' ? theme.colors.primary : theme.colors.post,
+                    borderColor: theme.colors.border,
+                  }
+                ]}
+                onPress={() => handleNotificationTypeChange('both')}
+              >
+                <View style={[
+                  styles.modernThemeIconContainer,
+                  {
+                    backgroundColor: notificationType === 'both' ? theme.colors.background : theme.colors.background,
+                  }
+                ]}>
+                  <Ionicons
+                    name="star"
+                    size={28}
+                    color={notificationType === 'both' ? theme.colors.iconActive : theme.colors.iconInactive}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.modernThemeLabel,
+                    {
+                      color: notificationType === 'both' ? theme.colors.text : theme.colors.text,
+                      fontSize: fontSize.sizes.small,
+                    }
+                  ]}
+                >
+                  Les deux
+                </Text>
+                {notificationType === 'both' && (
+                  <View style={styles.modernCheckmarkContainer}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={theme.colors.iconActive}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-          <Switch
-            value={notificationsEnabled}
-            onValueChange={handleNotificationsToggle}
-            trackColor={{ false: theme.colors.border, true: '#4CD964' }}
-            thumbColor="#fff"
-            style={{ alignSelf: 'center' }}
-          />
-        </View>
+        )}
 
         {/* Sélection des gravités */}
-        {notificationsEnabled && (
+        {notificationsEnabled && isPremium && (
           <View style={styles.severityContainer}>
             <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
               Gravités concernées
@@ -1099,7 +1856,7 @@ export default function OptionScreen() {
         )}
 
         {/* Sélection des jours */}
-        {notificationsEnabled && (
+        {notificationsEnabled && isPremium && (
           <View style={styles.severityContainer}>
             <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
               Jours actifs
@@ -1139,7 +1896,7 @@ export default function OptionScreen() {
         )}
 
         {/* Plage horaire */}
-        {notificationsEnabled && (
+        {notificationsEnabled && isPremium && (
           <View style={styles.severityContainer}>
             <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
               Plage horaire
@@ -1251,6 +2008,206 @@ export default function OptionScreen() {
             </View>
           </View>
         )}
+
+        {/* Récapitulatif matinal (Premium uniquement) */}
+        {notificationsEnabled && isPremium && (
+          <View style={styles.severityContainer}>
+            <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              Récapitulatif matinal
+            </Text>
+            <Text style={[styles.helperText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, marginBottom: 12 }]}>
+              Recevez un résumé des incidents sur vos lignes favorites chaque matin
+            </Text>
+
+            {isPremium ? (
+              <>
+                {/* Toggle récapitulatif matinal */}
+                <View style={[styles.notificationOption, { backgroundColor: morningSummaryEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5', marginBottom: 12 }]}>
+                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.iconActive }]}>
+                    <Ionicons name="sunny" size={22} color="#fff" />
+                  </View>
+                  <View style={styles.notificationDivider} />
+                  <View style={styles.notificationContent}>
+                    <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                      Activer le récapitulatif
+                    </Text>
+                    <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                      Notification quotidienne à l'heure choisie
+                    </Text>
+                  </View>
+                  <Switch
+                    value={morningSummaryEnabled}
+                    onValueChange={handleMorningSummaryToggle}
+                    trackColor={{ false: theme.colors.border, true: '#4CD964' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+
+                {/* Sélecteur d'heure */}
+                {morningSummaryEnabled && (
+                  <View style={styles.timeSelector}>
+                    <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small, marginBottom: 8 }]}>
+                      Heure du récapitulatif: {morningSummaryHour.toString().padStart(2, '0')}h00
+                    </Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.hourScroll}
+                      contentContainerStyle={styles.hourScrollContent}
+                    >
+                      {hours.map((hour) => (
+                        <TouchableOpacity
+                          key={`morning-${hour}`}
+                          style={[
+                            styles.hourChip,
+                            {
+                              backgroundColor: morningSummaryHour === hour ? theme.colors.primary : theme.colors.post,
+                              borderColor: morningSummaryHour === hour ? theme.colors.primary : theme.colors.border,
+                            }
+                          ]}
+                          onPress={() => handleMorningSummaryHourChange(hour)}
+                        >
+                          <Text
+                            style={[
+                              styles.hourText,
+                              {
+                                color: morningSummaryHour === hour ? theme.colors.text : theme.colors.text,
+                                fontSize: fontSize.sizes.small,
+                              }
+                            ]}
+                          >
+                            {hour.toString().padStart(2, '0')}h
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.accountOption,
+                  { backgroundColor: theme.colors.post, borderColor: '#FFD700', opacity: 0.6 }
+                ]}
+                onPress={() => navigation.navigate('Premium')}
+              >
+                <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.iconActive }]}>
+                  <Ionicons name="sunny" size={22} color="#fff" />
+                </View>
+                <View style={styles.accountDivider} />
+                <View style={styles.accountContent}>
+                  <Text style={[styles.accountLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                    Activer le récapitulatif
+                  </Text>
+                </View>
+                <View style={{ position: 'relative' }}>
+                  <Ionicons name="diamond" size={24} color="#FFD700" />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Récapitulatif du soir (Premium uniquement) */}
+        {notificationsEnabled && isPremium && (
+          <View style={styles.severityContainer}>
+            <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
+              Récapitulatif du soir
+            </Text>
+            <Text style={[styles.helperText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, marginBottom: 12 }]}>
+              Recevez un résumé des incidents sur vos lignes favorites chaque soir
+            </Text>
+
+            {isPremium ? (
+              <>
+                {/* Toggle récapitulatif du soir */}
+                <View style={[styles.notificationOption, { backgroundColor: eveningSummaryEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5', marginBottom: 12 }]}>
+                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.iconActive }]}>
+                    <Ionicons name="moon" size={22} color="#fff" />
+                  </View>
+                  <View style={styles.notificationDivider} />
+                  <View style={styles.notificationContent}>
+                    <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                      Activer le récapitulatif
+                    </Text>
+                    <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                      Notification quotidienne à l'heure choisie
+                    </Text>
+                  </View>
+                  <Switch
+                    value={eveningSummaryEnabled}
+                    onValueChange={handleEveningSummaryToggle}
+                    trackColor={{ false: theme.colors.border, true: '#4CD964' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+
+                {/* Sélecteur d'heure */}
+                {eveningSummaryEnabled && (
+                  <View style={styles.timeSelector}>
+                    <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small, marginBottom: 8 }]}>
+                      Heure du récapitulatif: {eveningSummaryHour.toString().padStart(2, '0')}h00
+                    </Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.hourScroll}
+                      contentContainerStyle={styles.hourScrollContent}
+                    >
+                      {hours.map((hour) => (
+                        <TouchableOpacity
+                          key={`evening-${hour}`}
+                          style={[
+                            styles.hourChip,
+                            {
+                              backgroundColor: eveningSummaryHour === hour ? theme.colors.primary : theme.colors.post,
+                              borderColor: eveningSummaryHour === hour ? theme.colors.primary : theme.colors.border,
+                            }
+                          ]}
+                          onPress={() => handleEveningSummaryHourChange(hour)}
+                        >
+                          <Text
+                            style={[
+                              styles.hourText,
+                              {
+                                color: eveningSummaryHour === hour ? theme.colors.text : theme.colors.text,
+                                fontSize: fontSize.sizes.small,
+                              }
+                            ]}
+                          >
+                            {hour.toString().padStart(2, '0')}h
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.accountOption,
+                  { backgroundColor: theme.colors.post, borderColor: '#FFD700', opacity: 0.6 }
+                ]}
+                onPress={() => navigation.navigate('Premium')}
+              >
+                <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.iconActive }]}>
+                  <Ionicons name="moon" size={22} color="#fff" />
+                </View>
+                <View style={styles.accountDivider} />
+                <View style={styles.accountContent}>
+                  <Text style={[styles.accountLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                    Activer le récapitulatif
+                  </Text>
+                </View>
+                <View style={{ position: 'relative' }}>
+                  <Ionicons name="diamond" size={24} color="#FFD700" />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Section Compte */}
@@ -1279,11 +2236,56 @@ export default function OptionScreen() {
               Lini Premium
             </Text>
             <Text style={[styles.notificationSubLabel, { color: '#000', opacity: 0.7, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
-              Profitez de Lini sans publicité pour 0,99€/mois
+              Profitez de Lini sans publicité pour 2.99€/mois
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#000" />
         </TouchableOpacity>
+
+        {/* Masquer les noms de famille (Premium uniquement) */}
+        {isPremium ? (
+          <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: '#E5E5E5' }]}>
+            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
+              <Ionicons name="eye-off-outline" size={22} color="#fff" />
+            </View>
+            <View style={styles.notificationDivider} />
+            <View style={styles.notificationContent}>
+              <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Masquer les noms de famille
+              </Text>
+              <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                Protégez votre vie privée
+              </Text>
+            </View>
+            <Switch
+              value={hideLastNames}
+              onValueChange={handleHideLastNamesToggle}
+              trackColor={{ false: '#767577', true: theme.colors.primary }}
+              thumbColor={hideLastNames ? '#fff' : '#f4f3f4'}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.accountOption,
+              { backgroundColor: theme.colors.post, borderColor: '#FFD700', opacity: 0.6 }
+            ]}
+            onPress={() => navigation.navigate('Premium')}
+          >
+            <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
+              <Ionicons name="eye-off-outline" size={22} color="#fff" />
+            </View>
+            <View style={styles.accountDivider} />
+            <View style={styles.accountContent}>
+              <Text style={[styles.accountLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Masquer les noms de famille
+              </Text>
+            </View>
+            <View style={{ position: 'relative' }}>
+              <Ionicons name="diamond" size={24} color="#FFD700" />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Changer le mot de passe */}
         <TouchableOpacity
@@ -1385,7 +2387,7 @@ export default function OptionScreen() {
             styles.accountOption,
             { backgroundColor: theme.colors.post, borderColor: '#E5E5E5' }
           ]}
-          onPress={() => navigation.navigate('PrivacyPolicy')}
+          onPress={() => Linking.openURL('https://anonyma93.github.io/Politique_de_confidentialit-/privacy-policy.html')}
         >
           <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#fff" />
@@ -1541,6 +2543,8 @@ export default function OptionScreen() {
                 secureTextEntry
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
+                autoComplete="off"
+                textContentType="oneTimeCode"
               />
 
               <Text style={[styles.inputLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
@@ -1561,6 +2565,8 @@ export default function OptionScreen() {
                 secureTextEntry
                 value={newPassword}
                 onChangeText={setNewPassword}
+                autoComplete="off"
+                textContentType="oneTimeCode"
               />
 
               <Text style={[styles.inputLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
@@ -1581,6 +2587,8 @@ export default function OptionScreen() {
                 secureTextEntry
                 value={confirmNewPassword}
                 onChangeText={setConfirmNewPassword}
+                autoComplete="off"
+                textContentType="oneTimeCode"
               />
 
               <TouchableOpacity
@@ -1753,6 +2761,7 @@ export default function OptionScreen() {
         </View>
       </Modal>
       </ScrollView>
+      <ScreenGuide screenName="Options" />
     </KeyboardAvoidingView>
   );
 }
@@ -2114,12 +3123,14 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    textAlign: 'center',
   },
   modalTitle: {
     fontFamily: 'Fredoka_600SemiBold',
+    textAlign: 'center',
   },
   modalBody: {
     gap: 12,
@@ -2136,14 +3147,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalButton: {
+    flex: 1,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
   },
   modalButtonText: {
     color: '#fff',
     fontFamily: 'Fredoka_600SemiBold',
+    textAlign: 'center',
+    width: '100%',
   },
   modalButtonsRow: {
     flexDirection: 'row',
@@ -2155,10 +3169,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
   },
   modalButtonSecondaryText: {
     fontFamily: 'Fredoka_600SemiBold',
+    textAlign: 'center',
+    width: '100%',
   },
   introContainer: {
     flexDirection: 'row',

@@ -3,14 +3,15 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
-import { useWalkthrough, WALKTHROUGH_STEPS } from '../context/WalkthroughContext';
-import WalkthroughTooltip from '../components/WalkthroughTooltip';
+import ScreenGuide from '../components/ScreenGuide';
 import { lignes } from '../data/lignes';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getCurrentUser } from '../services/authService';
 import { registerForPushNotifications } from '../services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
+import { formatUserName } from '../utils/formatUserName';
+import { useResponsive } from '../utils/responsive';
 
 // Composant de titre personnalisé pour la page d'accueil
 const HomeHeaderTitle = ({ theme, fontSize }) => {
@@ -87,7 +88,9 @@ const headerStyles = StyleSheet.create({
 
 export default function HomePage({ navigation }) {
   const { theme, fontSize } = useTheme();
+  const { isTablet, maxContentWidth } = useResponsive();
   const currentUser = getCurrentUser();
+
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userCities, setUserCities] = useState(['Paris']); // Villes sélectionnées par l'utilisateur
@@ -104,6 +107,18 @@ export default function HomePage({ navigation }) {
   const linesAnim = useRef(new Animated.Value(0)).current;
   const topPostAnim = useRef(new Animated.Value(0)).current;
   const emptyStateBounce = useRef(new Animated.Value(0)).current;
+
+  // Fonction helper pour formater le nom d'utilisateur
+  const getFormattedUserName = (displayName, postUserId, userHideLastNames) => {
+    if (!displayName) return 'Utilisateur';
+
+    // Séparer le prénom et le nom
+    const nameParts = displayName.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    return formatUserName(firstName, lastName, userHideLastNames, postUserId, currentUser?.uid);
+  };
 
   // Enregistrer le token FCM pour les notifications push au démarrage
   useEffect(() => {
@@ -381,19 +396,16 @@ export default function HomePage({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{
+          paddingBottom: 100,
+          alignItems: isTablet ? 'center' : 'stretch',
+        }}
       >
+        <View style={{ maxWidth: maxContentWidth, width: '100%' }}>
         {/* En-tête */}
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.HOME.INTRODUCTION}
-          title="Page d'accueil"
-          content="Elle permet de résumer les principales informations au cours de la journée comme le nombre de posts, la quantité de lignes et d'arrêts affectés."
-          placement="bottom"
-        >
-          <View style={[styles.headerContainer, { backgroundColor: theme.colors.backgroundPage }]}>
-            <HomeHeaderTitle theme={theme} fontSize={fontSize} />
-          </View>
-        </WalkthroughTooltip>
+        <View style={[styles.headerContainer, { backgroundColor: theme.colors.backgroundPage }]}>
+          <HomeHeaderTitle theme={theme} fontSize={fontSize} />
+        </View>
 
         {/* Métriques du jour */}
       <Animated.View
@@ -511,62 +523,54 @@ export default function HomePage({ navigation }) {
           </View>
         </View>
 
-        <WalkthroughTooltip
-          stepId={WALKTHROUGH_STEPS.HOME.IMPACTED_LINES}
-          previousStepId={WALKTHROUGH_STEPS.HOME.INTRODUCTION}
-          title="Lignes impactées"
-          content="Cette section affiche les lignes de transport avec des incidents signalés dans la dernière heure. Vous pouvez voir en un coup d'œil quelles lignes sont perturbées."
-          placement="top"
-        >
-          <View style={[styles.impactedLinesCard, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
-            {impactedLines.length > 0 ? (
-              <View style={styles.linesContainer}>
-                {impactedLines.map((ligne) => (
-                  <View
-                    key={ligne.value}
-                    style={[styles.lineBadge, { backgroundColor: ligne.backgroundColor }]}
-                  >
-                    <Text style={[styles.lineBadgeText, { color: ligne.color }]}>
-                      {ligne.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <Animated.View
-                  style={[
-                    styles.celebrationIconContainer,
-                    {
-                      transform: [
-                        {
-                          scale: emptyStateBounce.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 1.15],
-                          })
-                        },
-                        {
-                          rotate: emptyStateBounce.interpolate({
-                            inputRange: [0, 0.5, 1],
-                            outputRange: ['0deg', '-5deg', '0deg'],
-                          })
-                        }
-                      ],
-                    }
-                  ]}
+        <View style={[styles.impactedLinesCard, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+          {impactedLines.length > 0 ? (
+            <View style={styles.linesContainer}>
+              {impactedLines.map((ligne) => (
+                <View
+                  key={ligne.value}
+                  style={[styles.lineBadge, { backgroundColor: ligne.backgroundColor }]}
                 >
-                  <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
-                </Animated.View>
-                <Text style={[styles.emptyText, { fontSize: fontSize.sizes.subtitle }]}>
-                  Aucun incident signalé
-                </Text>
-                <Text style={[styles.emptySubtext, { fontSize: fontSize.sizes.body }]}>
-                  🎉 Tout roule !
-                </Text>
-              </View>
-            )}
-          </View>
-        </WalkthroughTooltip>
+                  <Text style={[styles.lineBadgeText, { color: ligne.color }]}>
+                    {ligne.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Animated.View
+                style={[
+                  styles.celebrationIconContainer,
+                  {
+                    transform: [
+                      {
+                        scale: emptyStateBounce.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 1.15],
+                        })
+                      },
+                      {
+                        rotate: emptyStateBounce.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: ['0deg', '-5deg', '0deg'],
+                        })
+                      }
+                    ],
+                  }
+                ]}
+              >
+                <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
+              </Animated.View>
+              <Text style={[styles.emptyText, { fontSize: fontSize.sizes.subtitle }]}>
+                Aucun incident signalé
+              </Text>
+              <Text style={[styles.emptySubtext, { fontSize: fontSize.sizes.body }]}>
+                🎉 Tout roule !
+              </Text>
+            </View>
+          )}
+        </View>
       </Animated.View>
 
       {/* Post avec le plus de likes */}
@@ -660,7 +664,7 @@ export default function HomePage({ navigation }) {
                   activeOpacity={topPost.userId === currentUser?.uid ? 1 : 0.7}
                 >
                   <Text style={[styles.userName, { color: theme.colors.text, fontSize: fontSize.sizes.body, marginTop: 8 }]}>
-                    {topPost.userDisplayName || 'Utilisateur'}
+                    {getFormattedUserName(topPost.userDisplayName, topPost.userId, topPost.userHideLastNames)}
                     {topPost.userId === currentUser?.uid && (
                       <Text style={{ color: theme.colors.iconActive }}> (Vous)</Text>
                     )}
@@ -730,7 +734,9 @@ export default function HomePage({ navigation }) {
           </View>
         </Animated.View>
       )}
+      </View>
       </ScrollView>
+      <ScreenGuide screenName="Home" />
     </View>
   );
 }
