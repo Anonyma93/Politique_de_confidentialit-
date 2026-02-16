@@ -340,8 +340,6 @@ export default function PostScreen({ navigation }) {
         likesCount: 0,
         likedBy: [], // Liste des UIDs qui ont liké
         commentsCount: 0, // Compteur de commentaires
-        confirmationsCount: 0, // Compteur de confirmations
-        confirmedBy: [], // Liste des UIDs qui ont confirmé
         createdAt: new Date().toISOString(),
       };
 

@@ -14,6 +14,21 @@ import { getUserData, getCurrentUser } from '../services/authService';
 import { lignes } from '../data/lignes';
 import { formatUserName } from '../utils/formatUserName';
 
+// Icônes des grades
+const GRADE_ICONS = {
+  'Guide suprême': require('../icon/guidesupreme.png'),
+  'Légende Métropolitaine': require('../icon/legendemetropolitaine.png'),
+  'Ministre du transport': require('../icon/ministredutransport.png'),
+  'Sauveur de ligne': require('../icon/sauveurdeligne.png'),
+  'Dompteur de Navigo': require('../icon/dompteurdenavigo.png'),
+  'Pro du Strapontin': require('../icon/produstrapontin.png'),
+  'Inspecteur Réseau': require('../icon/inspecteurreseau.png'),
+  'Contrôleur': require('../icon/controleur.png'),
+  'Chef de Quai': require('../icon/Chefdequai.png'),
+  'Agent de Bord': require('../icon/agentdebord.png'),
+  'Touriste': require('../icon/touriste.png'),
+};
+
 // Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
 const getGradeFromScore = (score) => {
   if (score >= 4.50) return 'Guide suprême';
@@ -47,8 +62,17 @@ export default function UserProfileScreen({ route, navigation }) {
     setLoading(true);
     const result = await getUserData(userId);
     if (result.success) {
-      setUserData(result.data);
-      setHideLastNames(result.data.hideLastNames || false);
+      const data = result.data;
+
+      // Fallback : si firstName/lastName manquent, les extraire de displayName
+      if (!data.firstName && data.displayName) {
+        const parts = data.displayName.trim().split(' ');
+        data.firstName = parts[0] || '';
+        data.lastName = parts.slice(1).join(' ') || '';
+      }
+
+      setUserData(data);
+      setHideLastNames(data.hideLastNames || false);
 
       // Charger les lignes préférées
       if (Array.isArray(result.data.preferredLines)) {
@@ -145,10 +169,10 @@ export default function UserProfileScreen({ route, navigation }) {
                   borderWidth: 1
                 }
               ]}>
-                <Ionicons
-                  name="star"
-                  size={16}
-                  color={theme.name === 'light' ? '#FFD700' : '#FFFFFF'}
+                <Image
+                  source={GRADE_ICONS[getGradeFromScore(userData?.userScore || 0)]}
+                  style={{ width: 18, height: 18 }}
+                  resizeMode="contain"
                 />
                 <Text style={[
                   styles.gradeText,

@@ -121,10 +121,8 @@ service cloud.firestore {
         && request.resource.data.type in ['incident', 'information']
         && isValidTimestamp(request.resource.data.createdAt)
         && request.resource.data.likesCount == 0
-        && request.resource.data.confirmationsCount == 0
         && request.resource.data.commentsCount == 0
         && request.resource.data.likedBy.size() == 0
-        && request.resource.data.confirmedBy.size() == 0
         // Validation optionnelle de la durée estimée
         && (!request.resource.data.keys().hasAny(['estimatedDuration'])
             || request.resource.data.estimatedDuration == null
@@ -149,18 +147,6 @@ service cloud.firestore {
             && request.resource.data.likedBy.size() == resource.data.likedBy.size() - 1
             && !request.resource.data.likedBy.hasAll([request.auth.uid])
             && request.resource.data.likesCount == resource.data.likesCount - 1)
-          // Ajout d'une confirmation
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmedBy', 'confirmationsCount'])
-            && request.resource.data.confirmedBy.hasAll(resource.data.confirmedBy)
-            && request.resource.data.confirmedBy.size() == resource.data.confirmedBy.size() + 1
-            && request.resource.data.confirmedBy.hasAll([request.auth.uid])
-            && request.resource.data.confirmationsCount == resource.data.confirmationsCount + 1)
-          // Retrait d'une confirmation
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmedBy', 'confirmationsCount'])
-            && resource.data.confirmedBy.hasAll(request.resource.data.confirmedBy)
-            && request.resource.data.confirmedBy.size() == resource.data.confirmedBy.size() - 1
-            && !request.resource.data.confirmedBy.hasAll([request.auth.uid])
-            && request.resource.data.confirmationsCount == resource.data.confirmationsCount - 1)
           // Incrémentation du compteur de commentaires (+1 ou -1)
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount'])
             && (request.resource.data.commentsCount == resource.data.commentsCount + 1
@@ -204,7 +190,7 @@ service cloud.firestore {
       // Créer une notification (automatique depuis l'app)
       allow create: if isAuthenticated()
         && request.resource.data.recipientId is string
-        && request.resource.data.type in ['like', 'confirmation', 'comment', 'post_mention']
+        && request.resource.data.type in ['like', 'comment', 'post_mention']
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.read == false;
 

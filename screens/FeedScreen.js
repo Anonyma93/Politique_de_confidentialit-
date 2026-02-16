@@ -22,16 +22,18 @@ import { getCurrentUser, getUserData, incrementLikesCount, decrementLikesCount, 
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { setBadgeCount } from '../services/notificationService';
-import { notifyLike, notifyConfirmation, markAllNotificationsAsRead } from '../services/internalNotificationService';
+import { notifyLike, markAllNotificationsAsRead } from '../services/internalNotificationService';
 import PremiumBadge from '../components/PremiumBadge';
 import CommentsModal from '../components/CommentsModal';
+import LikesModal from '../components/LikesModal';
+import LikersPreview from '../components/LikersPreview';
 import AnimatedMetroRefresh from '../components/AnimatedMetroRefresh';
 import { formatUserName } from '../utils/formatUserName';
 import { useResponsive } from '../utils/responsive';
 import { usePremium } from '../context/PremiumContext';
 
 // Composant de post animé
-const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfirm, onOpenComments, getSeverityColor, navigation }) => {
+const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onOpenComments, onOpenLikes, getSeverityColor, navigation, isPremium }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -82,7 +84,6 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
 
   const ligne = lignes.find(l => l.value === post.line);
   const hasLiked = post.likedBy?.includes(currentUser?.uid);
-  const hasConfirmed = post.confirmedBy?.includes(currentUser?.uid);
   const isOwnPost = post.userId === currentUser?.uid;
   const severityColor = getSeverityColor(post.severity, post.postType);
 
@@ -187,20 +188,6 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionButtonTopRight, { backgroundColor: theme.colors.navbar }]}
-            onPress={() => onConfirm(post)}
-            disabled={isOwnPost}
-          >
-            <Ionicons
-              name={hasConfirmed || isOwnPost ? "checkmark-circle" : "checkmark-circle-outline"}
-              size={20}
-              color={hasConfirmed || isOwnPost ? "#4CAF50" : theme.colors.iconInactive}
-            />
-            <Text style={[styles.actionCount, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-              {post.confirmationsCount || 0}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Header du post */}
@@ -343,6 +330,17 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onConfir
               {post.commentsCount || 0} commentaire{(post.commentsCount || 0) > 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
+
+          {/* Aperçu des likeurs */}
+          <View style={{ alignItems: 'center' }}>
+            <LikersPreview
+              likedBy={post.likedBy}
+              onPress={() => onOpenLikes(post)}
+              theme={theme}
+              fontSize={fontSize}
+              isPremium={isPremium}
+            />
+          </View>
         </View>
       </View>
     </Animated.View>
@@ -363,6 +361,10 @@ export default function FeedScreen({ navigation }) {
   // État pour le modal des commentaires
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
+
+  // État pour le modal des likes
+  const [likesModalVisible, setLikesModalVisible] = useState(false);
+  const [selectedPostForLikes, setSelectedPostForLikes] = useState(null);
 
   // Filtres (sélection multiple)
   const [selectedLines, setSelectedLines] = useState([]);
@@ -544,44 +546,6 @@ export default function FeedScreen({ navigation }) {
     }
   };
 
-  // Gérer la confirmation/déconfirmation d'incident
-  const handleConfirm = async (post) => {
-    if (!currentUser) return;
-
-    // Empêcher de confirmer son propre post
-    if (post.userId === currentUser.uid) return;
-
-    const postRef = doc(db, 'posts', post.id);
-    const hasConfirmed = post.confirmedBy?.includes(currentUser.uid);
-
-    try {
-      if (hasConfirmed) {
-        // Retirer la confirmation
-        await updateDoc(postRef, {
-          confirmationsCount: Math.max(0, (post.confirmationsCount || 0) - 1),
-          confirmedBy: arrayRemove(currentUser.uid),
-        });
-      } else {
-        // Confirmer
-        await updateDoc(postRef, {
-          confirmationsCount: (post.confirmationsCount || 0) + 1,
-          confirmedBy: arrayUnion(currentUser.uid),
-        });
-
-        // Créer une notification pour l'auteur du post
-        await notifyConfirmation(
-          post.userId,
-          currentUser.uid,
-          currentUser.displayName || 'Un utilisateur',
-          currentUser.photoURL,
-          post.id
-        );
-      }
-    } catch (error) {
-      console.error('Erreur lors de la confirmation:', error);
-    }
-  };
-
   // Ouvrir le modal des commentaires
   const handleOpenComments = (post) => {
     setSelectedPost(post);
@@ -592,6 +556,22 @@ export default function FeedScreen({ navigation }) {
   const handleCloseComments = () => {
     setCommentsModalVisible(false);
     setSelectedPost(null);
+  };
+
+  // Ouvrir le modal des likes (Premium uniquement)
+  const handleOpenLikes = (post) => {
+    if (!isPremium) {
+      navigation.navigate('Premium');
+      return;
+    }
+    setSelectedPostForLikes(post);
+    setLikesModalVisible(true);
+  };
+
+  // Fermer le modal des likes
+  const handleCloseLikes = () => {
+    setLikesModalVisible(false);
+    setSelectedPostForLikes(null);
   };
 
   // Gestionnaires de filtres rapides
@@ -746,10 +726,11 @@ export default function FeedScreen({ navigation }) {
       fontSize={fontSize}
       currentUser={currentUser}
       onLike={handleLike}
-      onConfirm={handleConfirm}
       onOpenComments={handleOpenComments}
+      onOpenLikes={handleOpenLikes}
       getSeverityColor={getSeverityColor}
       navigation={navigation}
+      isPremium={isPremium}
     />
   );
 
@@ -1207,6 +1188,14 @@ export default function FeedScreen({ navigation }) {
         visible={commentsModalVisible}
         onClose={handleCloseComments}
         post={selectedPost}
+        navigation={navigation}
+      />
+
+      {/* Modal des likes */}
+      <LikesModal
+        visible={likesModalVisible}
+        onClose={handleCloseLikes}
+        likedBy={selectedPostForLikes?.likedBy}
         navigation={navigation}
       />
 

@@ -27,19 +27,34 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePremium } from '../context/PremiumContext';
 
+// Icônes des grades
+const GRADE_ICONS = {
+  'Guide suprême': require('../icon/guidesupreme.png'),
+  'Légende Métropolitaine': require('../icon/legendemetropolitaine.png'),
+  'Ministre du transport': require('../icon/ministredutransport.png'),
+  'Sauveur de ligne': require('../icon/sauveurdeligne.png'),
+  'Dompteur de Navigo': require('../icon/dompteurdenavigo.png'),
+  'Pro du Strapontin': require('../icon/produstrapontin.png'),
+  'Inspecteur Réseau': require('../icon/inspecteurreseau.png'),
+  'Contrôleur': require('../icon/controleur.png'),
+  'Chef de Quai': require('../icon/Chefdequai.png'),
+  'Agent de Bord': require('../icon/agentdebord.png'),
+  'Touriste': require('../icon/touriste.png'),
+};
+
 // Grades et leurs seuils - Synchronisés avec authService.js
 const GRADES_HIERARCHY = [
-  { name: 'Guide suprême', minScore: 4.50, emoji: '👑', color: '#FFD700' },
-  { name: 'Légende Métropolitaine', minScore: 3.50, emoji: '🏆', color: '#E5E4E2' },
-  { name: 'Ministre du transport', minScore: 2.80, emoji: '🎖️', color: '#CD7F32' },
-  { name: 'Sauveur de ligne', minScore: 2.30, emoji: '🦸', color: '#4CAF50' },
-  { name: 'Dompteur de Navigo', minScore: 1.80, emoji: '🎯', color: '#2196F3' },
-  { name: 'Pro du Strapontin', minScore: 1.40, emoji: '⭐', color: '#9C27B0' },
-  { name: 'Inspecteur Réseau', minScore: 1.10, emoji: '🔍', color: '#FF9800' },
-  { name: 'Contrôleur', minScore: 0.80, emoji: '🎫', color: '#795548' },
-  { name: 'Chef de Quai', minScore: 0.55, emoji: '👷', color: '#607D8B' },
-  { name: 'Agent de Bord', minScore: 0.30, emoji: '👔', color: '#9E9E9E' },
-  { name: 'Touriste', minScore: 0, emoji: '🎒', color: '#BDBDBD' },
+  { name: 'Guide suprême', minScore: 4.50, icon: GRADE_ICONS['Guide suprême'], color: '#FFD700' },
+  { name: 'Légende Métropolitaine', minScore: 3.50, icon: GRADE_ICONS['Légende Métropolitaine'], color: '#E5E4E2' },
+  { name: 'Ministre du transport', minScore: 2.80, icon: GRADE_ICONS['Ministre du transport'], color: '#CD7F32' },
+  { name: 'Sauveur de ligne', minScore: 2.30, icon: GRADE_ICONS['Sauveur de ligne'], color: '#4CAF50' },
+  { name: 'Dompteur de Navigo', minScore: 1.80, icon: GRADE_ICONS['Dompteur de Navigo'], color: '#2196F3' },
+  { name: 'Pro du Strapontin', minScore: 1.40, icon: GRADE_ICONS['Pro du Strapontin'], color: '#9C27B0' },
+  { name: 'Inspecteur Réseau', minScore: 1.10, icon: GRADE_ICONS['Inspecteur Réseau'], color: '#FF9800' },
+  { name: 'Contrôleur', minScore: 0.80, icon: GRADE_ICONS['Contrôleur'], color: '#795548' },
+  { name: 'Chef de Quai', minScore: 0.55, icon: GRADE_ICONS['Chef de Quai'], color: '#607D8B' },
+  { name: 'Agent de Bord', minScore: 0.30, icon: GRADE_ICONS['Agent de Bord'], color: '#9E9E9E' },
+  { name: 'Touriste', minScore: 0, icon: GRADE_ICONS['Touriste'], color: '#BDBDBD' },
 ];
 
 // Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
@@ -541,10 +556,10 @@ export default function ProfileScreen() {
               onPress={() => setShowRankingModal(true)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name="star"
-                size={16}
-                color={theme.name === 'light' ? '#FFD700' : '#FFFFFF'}
+              <Image
+                source={GRADE_ICONS[getGradeFromScore(userData?.userScore || 0)]}
+                style={{ width: 18, height: 18 }}
+                resizeMode="contain"
               />
               <Text style={[
                 styles.gradeText,
@@ -1198,7 +1213,7 @@ export default function ProfileScreen() {
                     ]}
                   >
                     <View style={styles.gradeRowLeft}>
-                      <Text style={styles.gradeEmoji}>{grade.emoji}</Text>
+                      <Image source={grade.icon} style={styles.gradeIcon} resizeMode="contain" />
                       <View>
                         <Text style={[
                           styles.gradeName,
@@ -1235,12 +1250,21 @@ export default function ProfileScreen() {
 
                     {isCurrentGrade && nextGrade && scoreNeeded > 0 && isPremium && (
                       <View style={[styles.progressInfo, { backgroundColor: theme.colors.background }]}>
-                        <Text style={[
-                          styles.progressText,
-                          { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }
-                        ]}>
-                          {scoreNeeded.toFixed(2)} points pour {nextGrade.emoji} {nextGrade.name}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Text style={[
+                            styles.progressText,
+                            { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }
+                          ]}>
+                            {scoreNeeded.toFixed(2)} points pour
+                          </Text>
+                          <Image source={nextGrade.icon} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                          <Text style={[
+                            styles.progressText,
+                            { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }
+                          ]}>
+                            {nextGrade.name}
+                          </Text>
+                        </View>
                       </View>
                     )}
                   </View>
@@ -1787,8 +1811,9 @@ fieldCard: {
     alignItems: 'center',
     gap: 12,
   },
-  gradeEmoji: {
-    fontSize: 32,
+  gradeIcon: {
+    width: 30,
+    height: 30,
   },
   gradeName: {
     fontFamily: 'Fredoka_600SemiBold',

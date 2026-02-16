@@ -1,6 +1,6 @@
 {
   "name": "lini",
-  "version": "1.2.4",
+  "version": "2.0.8",
   "main": "index.js",
   "scripts": {
     "start": "expo start",

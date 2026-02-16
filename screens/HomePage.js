@@ -8,6 +8,8 @@ import { lignes } from '../data/lignes';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getCurrentUser } from '../services/authService';
+import LikesModal from '../components/LikesModal';
+import LikersPreview from '../components/LikersPreview';
 import { registerForPushNotifications } from '../services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 import { formatUserName } from '../utils/formatUserName';
@@ -95,6 +97,10 @@ export default function HomePage({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [userCities, setUserCities] = useState(['Paris']); // Villes sélectionnées par l'utilisateur
   const scrollViewRef = useRef(null);
+
+  // État pour le modal des likes
+  const [likesModalVisible, setLikesModalVisible] = useState(false);
+  const [selectedPostForLikes, setSelectedPostForLikes] = useState(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -730,12 +736,36 @@ export default function HomePage({ navigation }) {
               <Text style={[styles.postTime, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, textAlign: 'center', marginTop: 8 }]}>
                 {formatDate(topPost.createdAt)}
               </Text>
+
+              {/* Aperçu des likeurs */}
+              <View style={{ alignItems: 'center', marginTop: 4 }}>
+                <LikersPreview
+                  likedBy={topPost.likedBy}
+                  onPress={() => {
+                    setSelectedPostForLikes(topPost);
+                    setLikesModalVisible(true);
+                  }}
+                  theme={theme}
+                  fontSize={fontSize}
+                />
+              </View>
             </View>
           </View>
         </Animated.View>
       )}
       </View>
       </ScrollView>
+      {/* Modal des likes */}
+      <LikesModal
+        visible={likesModalVisible}
+        onClose={() => {
+          setLikesModalVisible(false);
+          setSelectedPostForLikes(null);
+        }}
+        likedBy={selectedPostForLikes?.likedBy}
+        navigation={navigation}
+      />
+
       <ScreenGuide screenName="Home" />
     </View>
   );

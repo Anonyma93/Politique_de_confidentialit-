@@ -18,7 +18,6 @@ import { db } from '../config/firebase';
  */
 export const NOTIFICATION_TYPES = {
   LIKE: 'like',
-  CONFIRMATION: 'confirmation',
   COMMENT: 'comment',
   POST_MENTION: 'post_mention', // Pour les futures mentions
 };
@@ -68,18 +67,6 @@ export const notifyLike = async (postOwnerId, likerId, likerName, likerPhoto, po
     senderId: likerId,
     senderName: likerName,
     senderPhoto: likerPhoto,
-    postId,
-  });
-};
-
-/**
- * Créer une notification pour une confirmation
- */
-export const notifyConfirmation = async (postOwnerId, confirmerId, confirmerName, confirmerPhoto, postId) => {
-  return createNotification(postOwnerId, NOTIFICATION_TYPES.CONFIRMATION, {
-    senderId: confirmerId,
-    senderName: confirmerName,
-    senderPhoto: confirmerPhoto,
     postId,
   });
 };

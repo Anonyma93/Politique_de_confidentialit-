@@ -1053,175 +1053,23 @@ export default function OptionScreen() {
             style={[
               styles.modernThemeCard,
               {
-                backgroundColor: selectedCities.includes('Paris') ? theme.colors.primary : theme.colors.post,
-                borderColor: theme.colors.border,
-              }
-            ]}
-            onPress={() => handleCityChange('Paris')}
-          >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Paris') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Image
-                source={require('../assets/paris.png')}
-                style={[
-                  styles.cityIcon,
-                  {
-                    opacity: selectedCities.includes('Paris') ? 1 : 0.5,
-                    tintColor: theme.colors.iconActive,
-                  }
-                ]}
-                resizeMode="contain"
-              />
-            </View>
-            <Text
-              style={[
-                styles.modernThemeLabel,
-                {
-                  color: selectedCities.includes('Paris') ? theme.colors.text : theme.colors.text,
-                  fontSize: fontSize.sizes.body,
-                }
-              ]}
-            >
-              Paris
-            </Text>
-            {selectedCities.includes('Paris') && (
-              <View style={styles.modernCheckmarkContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={theme.colors.iconActive}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modernThemeCard,
-              {
-                backgroundColor: selectedCities.includes('Lyon') ? theme.colors.primary : theme.colors.post,
-                borderColor: theme.colors.border,
-              }
-            ]}
-            onPress={() => handleCityChange('Lyon')}
-          >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Lyon') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Image
-                source={require('../assets/lyon.png')}
-                style={[
-                  styles.cityIcon,
-                  {
-                    opacity: selectedCities.includes('Lyon') ? 1 : 0.5,
-                    tintColor: theme.colors.iconActive,
-                  }
-                ]}
-                resizeMode="contain"
-              />
-            </View>
-            <Text
-              style={[
-                styles.modernThemeLabel,
-                {
-                  color: selectedCities.includes('Lyon') ? theme.colors.text : theme.colors.text,
-                  fontSize: fontSize.sizes.body,
-                }
-              ]}
-            >
-              Lyon
-            </Text>
-            {selectedCities.includes('Lyon') && (
-              <View style={styles.modernCheckmarkContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={theme.colors.iconActive}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modernThemeCard,
-              {
-                backgroundColor: selectedCities.includes('Toulouse') ? theme.colors.primary : theme.colors.post,
-                borderColor: theme.colors.border,
-              }
-            ]}
-            onPress={() => handleCityChange('Toulouse')}
-          >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Toulouse') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Image
-                source={require('../assets/toulouse.png')}
-                style={[
-                  styles.cityIcon,
-                  {
-                    opacity: selectedCities.includes('Toulouse') ? 1 : 0.5,
-                    tintColor: theme.colors.iconActive,
-                  }
-                ]}
-                resizeMode="contain"
-              />
-            </View>
-            <Text
-              style={[
-                styles.modernThemeLabel,
-                {
-                  color: selectedCities.includes('Toulouse') ? theme.colors.text : theme.colors.text,
-                  fontSize: fontSize.sizes.body,
-                }
-              ]}
-            >
-              Toulouse
-            </Text>
-            {selectedCities.includes('Toulouse') && (
-              <View style={styles.modernCheckmarkContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={theme.colors.iconActive}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modernThemeCard,
-              {
                 backgroundColor: selectedCities.includes('Bordeaux') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
               }
             ]}
             onPress={() => handleCityChange('Bordeaux')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Bordeaux') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="wine-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Bordeaux') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/bordeaux.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Bordeaux') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
@@ -1248,70 +1096,23 @@ export default function OptionScreen() {
             style={[
               styles.modernThemeCard,
               {
-                backgroundColor: selectedCities.includes('Marseille') ? theme.colors.primary : theme.colors.post,
-                borderColor: theme.colors.border,
-              }
-            ]}
-            onPress={() => handleCityChange('Marseille')}
-          >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Marseille') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="boat-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Marseille') ? 1 : 0.5 }}
-              />
-            </View>
-            <Text
-              style={[
-                styles.modernThemeLabel,
-                {
-                  color: selectedCities.includes('Marseille') ? theme.colors.text : theme.colors.text,
-                  fontSize: fontSize.sizes.body,
-                }
-              ]}
-            >
-              Marseille
-            </Text>
-            {selectedCities.includes('Marseille') && (
-              <View style={styles.modernCheckmarkContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={theme.colors.iconActive}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modernThemeCard,
-              {
                 backgroundColor: selectedCities.includes('Lille') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
               }
             ]}
             onPress={() => handleCityChange('Lille')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Lille') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="flower-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Lille') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/lille.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Lille') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
@@ -1338,37 +1139,35 @@ export default function OptionScreen() {
             style={[
               styles.modernThemeCard,
               {
-                backgroundColor: selectedCities.includes('Nantes') ? theme.colors.primary : theme.colors.post,
+                backgroundColor: selectedCities.includes('Lyon') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
               }
             ]}
-            onPress={() => handleCityChange('Nantes')}
+            onPress={() => handleCityChange('Lyon')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Nantes') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="leaf-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Nantes') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/lyon.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Lyon') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
                 {
-                  color: selectedCities.includes('Nantes') ? theme.colors.text : theme.colors.text,
+                  color: selectedCities.includes('Lyon') ? theme.colors.text : theme.colors.text,
                   fontSize: fontSize.sizes.body,
                 }
               ]}
             >
-              Nantes
+              Lyon
             </Text>
-            {selectedCities.includes('Nantes') && (
+            {selectedCities.includes('Lyon') && (
               <View style={styles.modernCheckmarkContainer}>
                 <Ionicons
                   name="checkmark-circle"
@@ -1383,82 +1182,35 @@ export default function OptionScreen() {
             style={[
               styles.modernThemeCard,
               {
-                backgroundColor: selectedCities.includes('Rennes') ? theme.colors.primary : theme.colors.post,
+                backgroundColor: selectedCities.includes('Marseille') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
               }
             ]}
-            onPress={() => handleCityChange('Rennes')}
+            onPress={() => handleCityChange('Marseille')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Rennes') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="shield-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Rennes') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/marseille.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Marseille') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
                 {
-                  color: selectedCities.includes('Rennes') ? theme.colors.text : theme.colors.text,
+                  color: selectedCities.includes('Marseille') ? theme.colors.text : theme.colors.text,
                   fontSize: fontSize.sizes.body,
                 }
               ]}
             >
-              Rennes
+              Marseille
             </Text>
-            {selectedCities.includes('Rennes') && (
-              <View style={styles.modernCheckmarkContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={theme.colors.iconActive}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modernThemeCard,
-              {
-                backgroundColor: selectedCities.includes('Nice') ? theme.colors.primary : theme.colors.post,
-                borderColor: theme.colors.border,
-              }
-            ]}
-            onPress={() => handleCityChange('Nice')}
-          >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Nice') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="sunny-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Nice') ? 1 : 0.5 }}
-              />
-            </View>
-            <Text
-              style={[
-                styles.modernThemeLabel,
-                {
-                  color: selectedCities.includes('Nice') ? theme.colors.text : theme.colors.text,
-                  fontSize: fontSize.sizes.body,
-                }
-              ]}
-            >
-              Nice
-            </Text>
-            {selectedCities.includes('Nice') && (
+            {selectedCities.includes('Marseille') && (
               <View style={styles.modernCheckmarkContainer}>
                 <Ionicons
                   name="checkmark-circle"
@@ -1479,19 +1231,17 @@ export default function OptionScreen() {
             ]}
             onPress={() => handleCityChange('Montpellier')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Montpellier') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="water-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Montpellier') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/montpellier.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Montpellier') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
@@ -1518,25 +1268,195 @@ export default function OptionScreen() {
             style={[
               styles.modernThemeCard,
               {
+                backgroundColor: selectedCities.includes('Nantes') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Nantes')}
+          >
+            <Image
+              source={require('../assets/nantes.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Nantes') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Nantes') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Nantes
+            </Text>
+            {selectedCities.includes('Nantes') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Nice') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Nice')}
+          >
+            <Image
+              source={require('../assets/nice.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Nice') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Nice') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Nice
+            </Text>
+            {selectedCities.includes('Nice') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Paris') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Paris')}
+          >
+            <Image
+              source={require('../assets/paris.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Paris') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Paris') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Paris
+            </Text>
+            {selectedCities.includes('Paris') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Rennes') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Rennes')}
+          >
+            <Image
+              source={require('../assets/rennes.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Rennes') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Rennes') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Rennes
+            </Text>
+            {selectedCities.includes('Rennes') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
                 backgroundColor: selectedCities.includes('Strasbourg') ? theme.colors.primary : theme.colors.post,
                 borderColor: theme.colors.border,
               }
             ]}
             onPress={() => handleCityChange('Strasbourg')}
           >
-            <View style={[
-              styles.modernThemeIconContainer,
-              {
-                backgroundColor: selectedCities.includes('Strasbourg') ? theme.colors.background : theme.colors.background,
-              }
-            ]}>
-              <Ionicons
-                name="star-outline"
-                size={28}
-                color={theme.colors.iconActive}
-                style={{ opacity: selectedCities.includes('Strasbourg') ? 1 : 0.5 }}
-              />
-            </View>
+            <Image
+              source={require('../assets/strasbourg.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Strasbourg') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
             <Text
               style={[
                 styles.modernThemeLabel,
@@ -1549,6 +1469,49 @@ export default function OptionScreen() {
               Strasbourg
             </Text>
             {selectedCities.includes('Strasbourg') && (
+              <View style={styles.modernCheckmarkContainer}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={theme.colors.iconActive}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modernThemeCard,
+              {
+                backgroundColor: selectedCities.includes('Toulouse') ? theme.colors.primary : theme.colors.post,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={() => handleCityChange('Toulouse')}
+          >
+            <Image
+              source={require('../assets/toulouse.png')}
+              style={{
+                width: 70,
+                height: 70,
+                marginBottom: 8,
+                opacity: selectedCities.includes('Toulouse') ? 1 : 0.5,
+                tintColor: theme.colors.iconActive,
+              }}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.modernThemeLabel,
+                {
+                  color: selectedCities.includes('Toulouse') ? theme.colors.text : theme.colors.text,
+                  fontSize: fontSize.sizes.body,
+                }
+              ]}
+            >
+              Toulouse
+            </Text>
+            {selectedCities.includes('Toulouse') && (
               <View style={styles.modernCheckmarkContainer}>
                 <Ionicons
                   name="checkmark-circle"
@@ -2858,6 +2821,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,

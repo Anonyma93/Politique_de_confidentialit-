@@ -480,172 +480,22 @@ export default function OnboardingScreen({ navigation, route }) {
               style={[
                 styles.cityCard,
                 {
-                  backgroundColor: selectedCity === 'Paris' ? theme.colors.primary : theme.colors.post,
-                  borderColor: theme.colors.border,
-                }
-              ]}
-              onPress={() => setSelectedCity('Paris')}
-            >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Paris' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Image
-                  source={require('../assets/paris.png')}
-                  style={[
-                    styles.cityIcon,
-                    {
-                      opacity: selectedCity === 'Paris' ? 1 : 0.5,
-                    }
-                  ]}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text
-                style={[
-                  styles.cityLabel,
-                  {
-                    color: selectedCity === 'Paris' ? theme.colors.text : theme.colors.text,
-                    fontSize: fontSize.sizes.body,
-                  }
-                ]}
-              >
-                Paris
-              </Text>
-              {selectedCity === 'Paris' && (
-                <View style={styles.cityCheckmarkContainer}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={theme.colors.iconActive}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.cityCard,
-                {
-                  backgroundColor: selectedCity === 'Lyon' ? theme.colors.primary : theme.colors.post,
-                  borderColor: theme.colors.border,
-                }
-              ]}
-              onPress={() => setSelectedCity('Lyon')}
-            >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Lyon' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Image
-                  source={require('../assets/lyon.png')}
-                  style={[
-                    styles.cityIcon,
-                    {
-                      opacity: selectedCity === 'Lyon' ? 1 : 0.5,
-                    }
-                  ]}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text
-                style={[
-                  styles.cityLabel,
-                  {
-                    color: selectedCity === 'Lyon' ? theme.colors.text : theme.colors.text,
-                    fontSize: fontSize.sizes.body,
-                  }
-                ]}
-              >
-                Lyon
-              </Text>
-              {selectedCity === 'Lyon' && (
-                <View style={styles.cityCheckmarkContainer}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={theme.colors.iconActive}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.cityCard,
-                {
-                  backgroundColor: selectedCity === 'Toulouse' ? theme.colors.primary : theme.colors.post,
-                  borderColor: theme.colors.border,
-                }
-              ]}
-              onPress={() => setSelectedCity('Toulouse')}
-            >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Toulouse' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Image
-                  source={require('../assets/toulouse.png')}
-                  style={[
-                    styles.cityIcon,
-                    {
-                      opacity: selectedCity === 'Toulouse' ? 1 : 0.5,
-                    }
-                  ]}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text
-                style={[
-                  styles.cityLabel,
-                  {
-                    color: selectedCity === 'Toulouse' ? theme.colors.text : theme.colors.text,
-                    fontSize: fontSize.sizes.body,
-                  }
-                ]}
-              >
-                Toulouse
-              </Text>
-              {selectedCity === 'Toulouse' && (
-                <View style={styles.cityCheckmarkContainer}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={theme.colors.iconActive}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.cityCard,
-                {
                   backgroundColor: selectedCity === 'Bordeaux' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
                 }
               ]}
               onPress={() => setSelectedCity('Bordeaux')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Bordeaux' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="wine-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Bordeaux' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/bordeaux.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Bordeaux' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
@@ -672,70 +522,22 @@ export default function OnboardingScreen({ navigation, route }) {
               style={[
                 styles.cityCard,
                 {
-                  backgroundColor: selectedCity === 'Marseille' ? theme.colors.primary : theme.colors.post,
-                  borderColor: theme.colors.border,
-                }
-              ]}
-              onPress={() => setSelectedCity('Marseille')}
-            >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Marseille' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="boat-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Marseille' ? 1 : 0.5 }}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.cityLabel,
-                  {
-                    color: selectedCity === 'Marseille' ? theme.colors.text : theme.colors.text,
-                    fontSize: fontSize.sizes.body,
-                  }
-                ]}
-              >
-                Marseille
-              </Text>
-              {selectedCity === 'Marseille' && (
-                <View style={styles.cityCheckmarkContainer}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={theme.colors.iconActive}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.cityCard,
-                {
                   backgroundColor: selectedCity === 'Lille' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
                 }
               ]}
               onPress={() => setSelectedCity('Lille')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Lille' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="flower-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Lille' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/lille.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Lille' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
@@ -762,37 +564,34 @@ export default function OnboardingScreen({ navigation, route }) {
               style={[
                 styles.cityCard,
                 {
-                  backgroundColor: selectedCity === 'Nantes' ? theme.colors.primary : theme.colors.post,
+                  backgroundColor: selectedCity === 'Lyon' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
                 }
               ]}
-              onPress={() => setSelectedCity('Nantes')}
+              onPress={() => setSelectedCity('Lyon')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Nantes' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="leaf-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Nantes' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/lyon.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Lyon' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
                   {
-                    color: selectedCity === 'Nantes' ? theme.colors.text : theme.colors.text,
+                    color: selectedCity === 'Lyon' ? theme.colors.text : theme.colors.text,
                     fontSize: fontSize.sizes.body,
                   }
                 ]}
               >
-                Nantes
+                Lyon
               </Text>
-              {selectedCity === 'Nantes' && (
+              {selectedCity === 'Lyon' && (
                 <View style={styles.cityCheckmarkContainer}>
                   <Ionicons
                     name="checkmark-circle"
@@ -807,82 +606,34 @@ export default function OnboardingScreen({ navigation, route }) {
               style={[
                 styles.cityCard,
                 {
-                  backgroundColor: selectedCity === 'Rennes' ? theme.colors.primary : theme.colors.post,
+                  backgroundColor: selectedCity === 'Marseille' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
                 }
               ]}
-              onPress={() => setSelectedCity('Rennes')}
+              onPress={() => setSelectedCity('Marseille')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Rennes' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="shield-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Rennes' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/marseille.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Marseille' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
                   {
-                    color: selectedCity === 'Rennes' ? theme.colors.text : theme.colors.text,
+                    color: selectedCity === 'Marseille' ? theme.colors.text : theme.colors.text,
                     fontSize: fontSize.sizes.body,
                   }
                 ]}
               >
-                Rennes
+                Marseille
               </Text>
-              {selectedCity === 'Rennes' && (
-                <View style={styles.cityCheckmarkContainer}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color={theme.colors.iconActive}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.cityCard,
-                {
-                  backgroundColor: selectedCity === 'Nice' ? theme.colors.primary : theme.colors.post,
-                  borderColor: theme.colors.border,
-                }
-              ]}
-              onPress={() => setSelectedCity('Nice')}
-            >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Nice' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="sunny-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Nice' ? 1 : 0.5 }}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.cityLabel,
-                  {
-                    color: selectedCity === 'Nice' ? theme.colors.text : theme.colors.text,
-                    fontSize: fontSize.sizes.body,
-                  }
-                ]}
-              >
-                Nice
-              </Text>
-              {selectedCity === 'Nice' && (
+              {selectedCity === 'Marseille' && (
                 <View style={styles.cityCheckmarkContainer}>
                   <Ionicons
                     name="checkmark-circle"
@@ -903,19 +654,16 @@ export default function OnboardingScreen({ navigation, route }) {
               ]}
               onPress={() => setSelectedCity('Montpellier')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Montpellier' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="water-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Montpellier' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/montpellier.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Montpellier' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
@@ -942,25 +690,190 @@ export default function OnboardingScreen({ navigation, route }) {
               style={[
                 styles.cityCard,
                 {
+                  backgroundColor: selectedCity === 'Nantes' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Nantes')}
+            >
+              <Image
+                source={require('../assets/nantes.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Nantes' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Nantes' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Nantes
+              </Text>
+              {selectedCity === 'Nantes' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Nice' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Nice')}
+            >
+              <Image
+                source={require('../assets/nice.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Nice' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Nice' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Nice
+              </Text>
+              {selectedCity === 'Nice' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Paris' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Paris')}
+            >
+              <Image
+                source={require('../assets/paris.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Paris' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Paris' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Paris
+              </Text>
+              {selectedCity === 'Paris' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Rennes' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Rennes')}
+            >
+              <Image
+                source={require('../assets/rennes.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Rennes' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Rennes' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Rennes
+              </Text>
+              {selectedCity === 'Rennes' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
                   backgroundColor: selectedCity === 'Strasbourg' ? theme.colors.primary : theme.colors.post,
                   borderColor: theme.colors.border,
                 }
               ]}
               onPress={() => setSelectedCity('Strasbourg')}
             >
-              <View style={[
-                styles.cityIconContainer,
-                {
-                  backgroundColor: selectedCity === 'Strasbourg' ? theme.colors.background : theme.colors.background,
-                }
-              ]}>
-                <Ionicons
-                  name="star-outline"
-                  size={32}
-                  color={theme.colors.iconActive}
-                  style={{ opacity: selectedCity === 'Strasbourg' ? 1 : 0.5 }}
-                />
-              </View>
+              <Image
+                source={require('../assets/strasbourg.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Strasbourg' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
               <Text
                 style={[
                   styles.cityLabel,
@@ -973,6 +886,48 @@ export default function OnboardingScreen({ navigation, route }) {
                 Strasbourg
               </Text>
               {selectedCity === 'Strasbourg' && (
+                <View style={styles.cityCheckmarkContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={theme.colors.iconActive}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cityCard,
+                {
+                  backgroundColor: selectedCity === 'Toulouse' ? theme.colors.primary : theme.colors.post,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedCity('Toulouse')}
+            >
+              <Image
+                source={require('../assets/toulouse.png')}
+                style={{
+                  width: 70,
+                  height: 70,
+                  marginBottom: 8,
+                  opacity: selectedCity === 'Toulouse' ? 1 : 0.5,
+                }}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.cityLabel,
+                  {
+                    color: selectedCity === 'Toulouse' ? theme.colors.text : theme.colors.text,
+                    fontSize: fontSize.sizes.body,
+                  }
+                ]}
+              >
+                Toulouse
+              </Text>
+              {selectedCity === 'Toulouse' && (
                 <View style={styles.cityCheckmarkContainer}>
                   <Ionicons
                     name="checkmark-circle"
@@ -1566,6 +1521,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
   },
   cityIcon: {
     width: 50,
