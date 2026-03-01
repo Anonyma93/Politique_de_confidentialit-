@@ -797,7 +797,7 @@ exports.syncCommentsCount = onRequest(
  */
 exports.sendMorningSummary = onSchedule(
   {
-    schedule: '0 * * * *', // Toutes les heures
+    schedule: '*/5 * * * *', // Toutes les 5 minutes
     timeZone: 'Europe/Paris',
     memory: '256MiB',
     region: 'europe-west1',
@@ -810,21 +810,24 @@ exports.sendMorningSummary = onSchedule(
       const now = new Date();
       const parisTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
       const currentHour = parisTime.getHours();
+      const currentMinute = parisTime.getMinutes();
 
-      console.log(`⏰ Heure actuelle à Paris: ${currentHour}h`);
+      console.log(`⏰ Heure actuelle à Paris: ${currentHour}h${currentMinute.toString().padStart(2, '0')}`);
 
-      // Récupérer les utilisateurs qui ont activé le récapitulatif matinal pour cette heure
+      // Récupérer les utilisateurs qui ont activé le récapitulatif matinal pour cette heure et cette minute
       const usersRef = db.collection('users');
       const morningSnapshot = await usersRef
         .where('morningSummaryEnabled', '==', true)
         .where('morningSummaryHour', '==', currentHour)
+        .where('morningSummaryMinute', '==', currentMinute)
         .where('notificationsEnabled', '==', true)
         .get();
 
-      // Récupérer les utilisateurs qui ont activé le récapitulatif du soir pour cette heure
+      // Récupérer les utilisateurs qui ont activé le récapitulatif du soir pour cette heure et cette minute
       const eveningSnapshot = await usersRef
         .where('eveningSummaryEnabled', '==', true)
         .where('eveningSummaryHour', '==', currentHour)
+        .where('eveningSummaryMinute', '==', currentMinute)
         .where('notificationsEnabled', '==', true)
         .get();
 

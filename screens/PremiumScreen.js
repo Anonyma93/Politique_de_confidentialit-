@@ -171,7 +171,6 @@ export default function PremiumScreen({ navigation }) {
   const displayPrice = products.length > 0 ? products[0].price : '2,99 €';
 
   const advantages = [
-    { icon: 'close-circle-outline', text: 'Aucune publicité', color: '#FF6B9D' },
     { icon: 'flash-outline', text: 'Expérience fluide et rapide', color: '#8CE9F6' },
     { icon: 'heart-outline', text: 'Soutenez le développement', color: '#F69B4C' },
     { icon: 'shield-checkmark-outline', text: 'Accès complet à toutes les fonctionnalités', color: '#9FFFB4' },
@@ -201,7 +200,7 @@ export default function PremiumScreen({ navigation }) {
             Lini Premium
           </Text>
           <Text style={[styles.headerSubtitle, { fontSize: fontSize.sizes.body }]}>
-            L'expérience complète sans publicité
+            Accédez à toutes les fonctionnalités
           </Text>
         </View>
       </LinearGradient>

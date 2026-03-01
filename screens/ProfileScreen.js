@@ -19,9 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import ScreenGuide from '../components/ScreenGuide';
-import { getCurrentUser, getUserData, updateUserProfile, updatePreferredLines, updatePreferredStations, updateProfilePhoto } from '../services/authService';
-import { lignes } from '../data/lignes';
-import { getStationsByPreferredLines } from '../data/stations';
+import { getCurrentUser, getUserData, updateUserProfile, updatePreferredLines, updatePreferredStations, updateProfilePhoto, getGradeFromScore } from '../services/authService';
+import { lignes, stations } from '../data/lignes';
 import PremiumBadge from '../components/PremiumBadge';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
@@ -57,20 +56,6 @@ const GRADES_HIERARCHY = [
   { name: 'Touriste', minScore: 0, icon: GRADE_ICONS['Touriste'], color: '#BDBDBD' },
 ];
 
-// Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
-const getGradeFromScore = (score) => {
-  if (score >= 4.50) return 'Guide suprême';
-  if (score >= 3.50) return 'Légende Métropolitaine';
-  if (score >= 2.80) return 'Ministre du transport';
-  if (score >= 2.30) return 'Sauveur de ligne';
-  if (score >= 1.80) return 'Dompteur de Navigo';
-  if (score >= 1.40) return 'Pro du Strapontin';
-  if (score >= 1.10) return 'Inspecteur Réseau';
-  if (score >= 0.80) return 'Contrôleur';
-  if (score >= 0.55) return 'Chef de Quai';
-  if (score >= 0.30) return 'Agent de Bord';
-  return 'Touriste';
-};
 
 // Composant bouton animé
 const AnimatedButton = ({ children, onPress, disabled, style }) => {
@@ -194,6 +179,7 @@ export default function ProfileScreen() {
 
   // État pour le modal de pyramide des rankings
   const [showRankingModal, setShowRankingModal] = useState(false);
+  const [showScoreTip, setShowScoreTip] = useState(false);
 
   // État pour l'upload de la photo
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -215,8 +201,9 @@ export default function ProfileScreen() {
   // Mettre à jour les stations disponibles quand les lignes préférées changent
   useEffect(() => {
     if (selectedLines.length > 0) {
-      const stations = getStationsByPreferredLines(selectedLines);
-      setAvailableStations(stations);
+      const allStations = selectedLines.flatMap(line => stations[line] || []);
+      const uniqueStations = [...new Set(allStations)].sort();
+      setAvailableStations(uniqueStations);
     } else {
       setAvailableStations([]);
     }
@@ -366,15 +353,43 @@ export default function ProfileScreen() {
     }
   };
 
-  // Classifier les lignes par catégorie
+  // Classifier les lignes par ville puis par catégorie
   const categorizeLines = () => {
-    const categories = {
-      'Métro': lignes.filter(l => l.label.startsWith('Métro ')),
-      'RER': lignes.filter(l => l.label.startsWith('RER ')),
-      'Tram': lignes.filter(l => l.label.startsWith('Tram ')),
-      'Transilien': lignes.filter(l => l.label.startsWith('Ligne ')),
-    };
-    return categories;
+    const userCities = userData?.cities?.length > 0
+      ? userData.cities
+      : (userData?.city ? [userData.city] : null);
+
+    const citiesToShow = userCities || [];
+    const result = {};
+
+    citiesToShow.forEach(city => {
+      const cityLines = lignes.filter(l => l.city === city);
+      const types = {
+        'Métro': cityLines.filter(l => l.label.startsWith('Métro ')),
+        'RER': cityLines.filter(l => l.label.startsWith('RER ')),
+        'Tram': cityLines.filter(l => l.label.startsWith('Tram ') || l.label.startsWith('Tramway ')),
+        'Transilien': cityLines.filter(l => l.label.startsWith('Ligne ')),
+      };
+      const filteredTypes = Object.fromEntries(
+        Object.entries(types).filter(([_, lines]) => lines.length > 0)
+      );
+      if (Object.keys(filteredTypes).length > 0) {
+        result[city] = filteredTypes;
+      }
+    });
+
+    // Fallback si aucune ville configurée
+    if (Object.keys(result).length === 0) {
+      const allTypes = {
+        'Métro': lignes.filter(l => l.label.startsWith('Métro ')),
+        'RER': lignes.filter(l => l.label.startsWith('RER ')),
+        'Tram': lignes.filter(l => l.label.startsWith('Tram ') || l.label.startsWith('Tramway ')),
+        'Transilien': lignes.filter(l => l.label.startsWith('Ligne ')),
+      };
+      return { '': Object.fromEntries(Object.entries(allTypes).filter(([_, lines]) => lines.length > 0)) };
+    }
+
+    return result;
   };
 
   const categories = categorizeLines();
@@ -469,24 +484,40 @@ export default function ProfileScreen() {
         <ScrollView
           ref={scrollViewRef}
           style={styles.container}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: Platform.OS === 'android' ? 150 : 100 }}
           keyboardShouldPersistTaps="handled"
         >
         {/* En-tête avec photo */}
         <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
           {/* Badge de tendance score */}
           {userData?.userScore !== undefined && userData?.userScore !== 0 && (
-          <View style={[
-            styles.scoreTrendBadge,
-            { backgroundColor: userData?.userScore > 0 ? '#4CAF5020' : '#F4433620' }
-          ]}>
-            <Ionicons
-              name={userData?.userScore > 0 ? "trending-up" : "trending-down"}
-              size={20}
-              color={userData?.userScore > 0 ? "#4CAF50" : "#F44336"}
-            />
-          </View>
-        )}
+            <TouchableOpacity
+              style={[
+                styles.scoreTrendBadge,
+                { backgroundColor: userData?.userScore > 0 ? '#4CAF5020' : '#F4433620' }
+              ]}
+              onPress={() => {
+                setShowScoreTip(v => !v);
+                setTimeout(() => setShowScoreTip(false), 3500);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={userData?.userScore > 0 ? "trending-up" : "trending-down"}
+                size={20}
+                color={userData?.userScore > 0 ? "#4CAF50" : "#F44336"}
+              />
+              {showScoreTip && (
+                <View style={styles.scoreTipBubble}>
+                  <Text style={styles.scoreTipText}>
+                    {userData?.userScore > 0
+                      ? 'Votre score augmente grâce à votre implication sur l\'application.'
+                      : 'Votre score diminue en raison de votre manque d\'implication sur l\'application.'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
 
         <View style={styles.profileSection}>
           <View style={styles.photoContainer}>
@@ -898,25 +929,37 @@ export default function ProfileScreen() {
               </View>
             )}
 
-            {/* Sélecteur de lignes par catégorie */}
-            {Object.entries(categories).map(([categoryName, categoryLines]) => (
-              <View key={categoryName} style={styles.categoryContainer}>
-                <Text style={[styles.categoryTitle, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
-                  {categoryName}
-                </Text>
-                <View style={styles.badgesContainer}>
-                  {categoryLines.map((ligne) => {
-                    const isSelected = tempSelectedLines.includes(ligne.value);
-                    return (
-                      <AnimatedLineBadge
-                        key={ligne.value}
-                        ligne={ligne}
-                        isSelected={isSelected}
-                        onPress={() => toggleLine(ligne.value)}
-                      />
-                    );
-                  })}
-                </View>
+            {/* Sélecteur de lignes par ville puis par catégorie */}
+            {Object.entries(categories).map(([cityName, cityCategories]) => (
+              <View key={cityName}>
+                {cityName ? (
+                  <View style={[styles.cityHeader, { borderBottomColor: theme.colors.border }]}>
+                    <Ionicons name="location" size={16} color={theme.colors.iconActive} />
+                    <Text style={[styles.cityHeaderText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                      {cityName}
+                    </Text>
+                  </View>
+                ) : null}
+                {Object.entries(cityCategories).map(([typeName, typeLines]) => (
+                  <View key={typeName} style={styles.categoryContainer}>
+                    <Text style={[styles.categoryTitle, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                      {typeName}
+                    </Text>
+                    <View style={styles.badgesContainer}>
+                      {typeLines.map((ligne) => {
+                        const isSelected = tempSelectedLines.includes(ligne.value);
+                        return (
+                          <AnimatedLineBadge
+                            key={ligne.value}
+                            ligne={ligne}
+                            isSelected={isSelected}
+                            onPress={() => toggleLine(ligne.value)}
+                          />
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
               </View>
             ))}
 
@@ -1341,7 +1384,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 20,
+    zIndex: 999,
+  },
+  scoreTipBubble: {
+    position: 'absolute',
+    top: 54,
+    right: 0,
+    width: 200,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    borderRadius: 12,
+    padding: 10,
+    zIndex: 999,
+    elevation: 20,
+  },
+  scoreTipText: {
+    color: '#fff',
+    fontFamily: 'Fredoka_400Regular',
+    fontSize: 12,
+    lineHeight: 17,
   },
   profileSection: {
     alignItems: 'center',
@@ -1714,8 +1775,21 @@ fieldCard: {
     fontFamily: 'Fredoka_400Regular',
     flex: 1,
   },
+  cityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    marginTop: 10,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+  },
+  cityHeaderText: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
   categoryContainer: {
     marginBottom: 20,
+    marginTop: 8,
   },
   categoryTitle: {
     fontFamily: 'Fredoka_600SemiBold',

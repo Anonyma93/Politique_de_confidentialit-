@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
@@ -99,9 +100,12 @@ const bubbleStyles = StyleSheet.create({
 // Composant de tab bar personnalisé avec effet liquid glass
 function CustomTabBar({ state, descriptors, navigation, unreadCount = 0 }) {
   const glassSupported = isLiquidGlassAvailable();
+  const insets = useSafeAreaInsets();
+
+  const tabBarBottom = Platform.OS === 'android' ? insets.bottom : 6;
 
   return (
-    <View style={tabBarStyles.glassContainer}>
+    <View style={[tabBarStyles.glassContainer, { bottom: tabBarBottom }]}>
       <GlassView
         glassEffectStyle="clear"
         isInteractive={true}
@@ -319,6 +323,7 @@ export default function TabNavigator() {
   const { refreshPremiumStatus } = usePremium();
   const currentUser = getCurrentUser();
   const [unreadCount, setUnreadCount] = useState(0);
+  const insets = useSafeAreaInsets();
 
   // Activer l'écoute des notifications
   useNotificationListener(currentUser);

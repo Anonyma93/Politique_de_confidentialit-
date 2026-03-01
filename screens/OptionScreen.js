@@ -30,6 +30,91 @@ import { activatePremiumForUser, deactivatePremiumForUser } from '../utils/activ
 import PremiumBadge from '../components/PremiumBadge';
 import { usePremium } from '../context/PremiumContext';
 
+const DRUM_ITEM_HEIGHT = 48;
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const DRUM_MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+const DrumPicker = ({ items, value, onChange, theme, cardBackground, formatItem }) => {
+  const scrollRef = useRef(null);
+  const currentIndex = items.indexOf(value);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: safeIndex * DRUM_ITEM_HEIGHT, animated: false });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleMomentumScrollEnd = (event) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const idx = Math.round(y / DRUM_ITEM_HEIGHT);
+    onChange(items[Math.max(0, Math.min(items.length - 1, idx))]);
+  };
+
+  return (
+    <View style={{ flex: 1, height: DRUM_ITEM_HEIGHT * 5, position: 'relative', overflow: 'hidden' }}>
+
+      {/* 1. Highlight fixe — rendu EN PREMIER = derrière le ScrollView */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: DRUM_ITEM_HEIGHT * 2,
+          left: 4,
+          right: 4,
+          height: DRUM_ITEM_HEIGHT,
+          backgroundColor: theme.colors.primary,
+          borderRadius: 10,
+        }}
+      />
+
+      {/* 2. ScrollView — rendu après le highlight, fond transparent, texte visible par-dessus le vert */}
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={DRUM_ITEM_HEIGHT}
+        decelerationRate="fast"
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        contentContainerStyle={{ paddingVertical: DRUM_ITEM_HEIGHT * 2 }}
+        style={{ backgroundColor: 'transparent' }}
+      >
+        {items.map((item, index) => {
+          const isSelected = item === value;
+          return (
+            <View
+              key={index}
+              style={{ height: DRUM_ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center' }}
+            >
+              <Text
+                style={{
+                  fontFamily: isSelected ? 'Fredoka_700Bold' : 'Fredoka_400Regular',
+                  fontSize: isSelected ? 26 : 17,
+                  color: isSelected ? '#1a1a1a' : theme.colors.text,
+                  opacity: isSelected ? 1 : 0.4,
+                }}
+              >
+                {formatItem ? formatItem(item) : item.toString()}
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {/* 3. Fondus — rendus EN DERNIER = par-dessus tout (ScrollView + highlight) */}
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: DRUM_ITEM_HEIGHT * 2 }}>
+        <View style={{ flex: 1, backgroundColor: cardBackground, opacity: 0.92 }} />
+        <View style={{ flex: 1, backgroundColor: cardBackground, opacity: 0.55 }} />
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: DRUM_ITEM_HEIGHT * 2 }}>
+        <View style={{ flex: 1, backgroundColor: cardBackground, opacity: 0.55 }} />
+        <View style={{ flex: 1, backgroundColor: cardBackground, opacity: 0.92 }} />
+      </View>
+
+    </View>
+  );
+};
+
 export default function OptionScreen() {
   const { theme, changeTheme, fontSize, changeFontSize, customColor, setCustomColor } = useTheme();
   const { resetGuides } = useScreenGuide();
@@ -61,14 +146,29 @@ export default function OptionScreen() {
   const [selectedDays, setSelectedDays] = useState([1, 2, 3, 4, 5]); // Lundi à Vendredi par défaut
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(18);
+  const [startMinute, setStartMinute] = useState(0);
+  const [endMinute, setEndMinute] = useState(0);
+  const [showTimePickerModal, setShowTimePickerModal] = useState(false);
+  const [tempStartHour, setTempStartHour] = useState(8);
+  const [tempEndHour, setTempEndHour] = useState(18);
+  const [tempStartMinute, setTempStartMinute] = useState(0);
+  const [tempEndMinute, setTempEndMinute] = useState(0);
 
   // États pour le récapitulatif matinal
   const [morningSummaryEnabled, setMorningSummaryEnabled] = useState(false);
   const [morningSummaryHour, setMorningSummaryHour] = useState(7);
+  const [morningSummaryMinute, setMorningSummaryMinute] = useState(0);
+  const [showMorningPickerModal, setShowMorningPickerModal] = useState(false);
+  const [tempMorningHour, setTempMorningHour] = useState(7);
+  const [tempMorningMinute, setTempMorningMinute] = useState(0);
 
   // États pour le récapitulatif du soir
   const [eveningSummaryEnabled, setEveningSummaryEnabled] = useState(false);
   const [eveningSummaryHour, setEveningSummaryHour] = useState(18);
+  const [eveningSummaryMinute, setEveningSummaryMinute] = useState(0);
+  const [showEveningPickerModal, setShowEveningPickerModal] = useState(false);
+  const [tempEveningHour, setTempEveningHour] = useState(18);
+  const [tempEveningMinute, setTempEveningMinute] = useState(0);
 
   // État pour la ville
   const [selectedCities, setSelectedCities] = useState(['Paris']);
@@ -212,6 +312,8 @@ export default function OptionScreen() {
         const days = await AsyncStorage.getItem('selectedDays');
         const start = await AsyncStorage.getItem('startHour');
         const end = await AsyncStorage.getItem('endHour');
+        const startMin = await AsyncStorage.getItem('startMinute');
+        const endMin = await AsyncStorage.getItem('endMinute');
 
         if (enabled !== null) {
           setNotificationsEnabled(enabled === 'true');
@@ -230,6 +332,12 @@ export default function OptionScreen() {
         }
         if (end !== null) {
           setEndHour(parseInt(end));
+        }
+        if (startMin !== null) {
+          setStartMinute(parseInt(startMin));
+        }
+        if (endMin !== null) {
+          setEndMinute(parseInt(endMin));
         }
 
         // Charger la ville et les préférences depuis Firestore
@@ -254,6 +362,9 @@ export default function OptionScreen() {
             if (userData.morningSummaryHour !== undefined) {
               setMorningSummaryHour(userData.morningSummaryHour);
             }
+            if (userData.morningSummaryMinute !== undefined) {
+              setMorningSummaryMinute(userData.morningSummaryMinute);
+            }
 
             // Charger les préférences du récapitulatif du soir
             if (userData.eveningSummaryEnabled !== undefined) {
@@ -261,6 +372,21 @@ export default function OptionScreen() {
             }
             if (userData.eveningSummaryHour !== undefined) {
               setEveningSummaryHour(userData.eveningSummaryHour);
+            }
+            if (userData.eveningSummaryMinute !== undefined) {
+              setEveningSummaryMinute(userData.eveningSummaryMinute);
+            }
+
+            // Migration : écrire les minutes à 0 si elles n'existent pas encore en Firestore
+            const migrationFields = {};
+            if (userData.morningSummaryHour !== undefined && userData.morningSummaryMinute === undefined) {
+              migrationFields.morningSummaryMinute = 0;
+            }
+            if (userData.eveningSummaryHour !== undefined && userData.eveningSummaryMinute === undefined) {
+              migrationFields.eveningSummaryMinute = 0;
+            }
+            if (Object.keys(migrationFields).length > 0) {
+              await updateDoc(doc(db, 'users', currentUser.uid), migrationFields);
             }
 
             // Charger les villes (nouveau format tableau ou ancien format string)
@@ -345,7 +471,7 @@ export default function OptionScreen() {
   );
 
   // Sauvegarder les préférences de notifications
-  const saveNotificationPreferences = async (enabled, notifType, severities, days, start, end) => {
+  const saveNotificationPreferences = async (enabled, notifType, severities, days, start, end, startMin = 0, endMin = 0) => {
     try {
       await AsyncStorage.setItem('notificationsEnabled', enabled.toString());
       await AsyncStorage.setItem('notificationType', notifType);
@@ -353,6 +479,8 @@ export default function OptionScreen() {
       await AsyncStorage.setItem('selectedDays', JSON.stringify(days));
       await AsyncStorage.setItem('startHour', start.toString());
       await AsyncStorage.setItem('endHour', end.toString());
+      await AsyncStorage.setItem('startMinute', startMin.toString());
+      await AsyncStorage.setItem('endMinute', endMin.toString());
 
       // Sauvegarder également dans Firebase si l'utilisateur est connecté
       if (currentUser) {
@@ -364,6 +492,8 @@ export default function OptionScreen() {
           selectedDays: days,
           startHour: start,
           endHour: end,
+          startMinute: startMin,
+          endMinute: endMin,
         });
       }
     } catch (error) {
@@ -429,18 +559,6 @@ export default function OptionScreen() {
     await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, newDays, startHour, endHour);
   };
 
-  // Gérer le changement de l'heure de début
-  const handleStartHourChange = async (hour) => {
-    setStartHour(hour);
-    await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, selectedDays, hour, endHour);
-  };
-
-  // Gérer le changement de l'heure de fin
-  const handleEndHourChange = async (hour) => {
-    setEndHour(hour);
-    await saveNotificationPreferences(notificationsEnabled, notificationType, selectedSeverities, selectedDays, startHour, hour);
-  };
-
   // Gérer le changement du récapitulatif matinal
   const handleMorningSummaryToggle = async (value) => {
     try {
@@ -461,21 +579,22 @@ export default function OptionScreen() {
     }
   };
 
-  // Gérer le changement de l'heure du récapitulatif matinal
-  const handleMorningSummaryHourChange = async (hour) => {
+  // Sauvegarder l'heure+minute du récapitulatif matinal
+  const saveMorningSummary = async (hour, minute) => {
     try {
       setMorningSummaryHour(hour);
+      setMorningSummaryMinute(minute);
 
       if (currentUser) {
         const userRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userRef, {
           morningSummaryHour: hour,
+          morningSummaryMinute: minute,
           updatedAt: new Date().toISOString(),
         });
-        console.log('✅ Heure du récapitulatif matinal:', hour);
       }
     } catch (error) {
-      console.error('Error updating morning summary hour:', error);
+      console.error('Error updating morning summary:', error);
       Alert.alert('Erreur', 'Impossible de mettre à jour l\'heure');
     }
   };
@@ -500,21 +619,22 @@ export default function OptionScreen() {
     }
   };
 
-  // Gérer le changement de l'heure du récapitulatif du soir
-  const handleEveningSummaryHourChange = async (hour) => {
+  // Sauvegarder l'heure+minute du récapitulatif du soir
+  const saveEveningSummary = async (hour, minute) => {
     try {
       setEveningSummaryHour(hour);
+      setEveningSummaryMinute(minute);
 
       if (currentUser) {
         const userRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userRef, {
           eveningSummaryHour: hour,
+          eveningSummaryMinute: minute,
           updatedAt: new Date().toISOString(),
         });
-        console.log('✅ Heure du récapitulatif du soir:', hour);
       }
     } catch (error) {
-      console.error('Error updating evening summary hour:', error);
+      console.error('Error updating evening summary:', error);
       Alert.alert('Erreur', 'Impossible de mettre à jour l\'heure');
     }
   };
@@ -858,7 +978,7 @@ export default function OptionScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={styles.container}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'android' ? 150 : 100 }}
         keyboardShouldPersistTaps="handled"
       >
       {/* Titre de la page */}
@@ -868,187 +988,16 @@ export default function OptionScreen() {
         </Text>
       </View>
 
-      {/* Introduction */}
-      <View style={[styles.section, { marginBottom: 0 }]} ref={introRef}>
-        <View style={styles.introContainer}>
-          <Ionicons name="settings-outline" size={20} color={theme.colors.iconActive} />
-          <Text style={[styles.introText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-            Personnalisez votre application selon vos préférences
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitleContainer} ref={themeRef}>
-          <View style={styles.titleAccent} />
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-            Apparence
-          </Text>
-        </View>
-
-        <View style={styles.modernThemeContainer}>
-          {allThemeOptions.map((option) => {
-            const isSelected = theme.name === option.key;
-            const isLocked = option.premiumOnly && !isPremium;
-
-            return (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.modernThemeCard,
-                  {
-                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.post,
-                    borderColor: isLocked ? '#FFD700' : theme.colors.border,
-                    opacity: isLocked ? 0.6 : 1,
-                  }
-                ]}
-                onPress={() => {
-                  if (isLocked) {
-                    // Scroll vers la section Premium
-                    scrollViewRef.current?.scrollTo({
-                      y: 1200, // Position approximative de la section Premium
-                      animated: true,
-                    });
-                    return;
-                  }
-                  changeTheme(option.key);
-                  if (option.key === 'custom') {
-                    setShowColorPicker(true);
-                  }
-                }}
-                disabled={isLocked}
-              >
-                <View style={{ position: 'relative' }}>
-                  <View style={[
-                    styles.modernThemeIconContainer,
-                    {
-                      backgroundColor: isSelected ? theme.colors.background : theme.colors.background,
-                    }
-                  ]}>
-                    <Ionicons
-                      name={option.icon}
-                      size={28}
-                      color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
-                    />
-                  </View>
-                  {/* Badge Premium */}
-                  {isLocked && (
-                    <PremiumBadge size={24} style={styles.premiumBadge} />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.modernThemeLabel,
-                    {
-                      color: isSelected ? theme.colors.text : theme.colors.text,
-                      fontSize: fontSize.sizes.body,
-                    }
-                  ]}
-                >
-                  {option.label}
-                </Text>
-                {isSelected && !isLocked && (
-                  <View style={styles.modernCheckmarkContainer}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color={theme.colors.iconActive}
-                    />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Bouton pour ouvrir le sélecteur de couleur */}
-        {theme.name === 'custom' && (
-          <View style={styles.colorPickerContainer}>
-            <TouchableOpacity
-              style={[styles.colorPickerButton, { backgroundColor: theme.colors.primary, borderColor: theme.colors.border }]}
-              onPress={() => setShowColorPicker(true)}
-            >
-              <View style={[styles.colorPreview, { backgroundColor: customColor }]} />
-              <Text style={[styles.colorPickerButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
-                Personnaliser la couleur
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.iconActive} />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitleContainer}>
-          <View style={styles.titleAccent} />
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-            Taille de police
-          </Text>
-        </View>
-
-        <View style={styles.modernThemeContainer}>
-          {fontSizeOptions.map((option) => {
-            const isSelected = fontSize.name === option.key;
-            return (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.modernThemeCard,
-                  {
-                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.post,
-                    borderColor: theme.colors.border,
-                  }
-                ]}
-                onPress={() => changeFontSize(option.key)}
-              >
-                <View style={[
-                  styles.modernThemeIconContainer,
-                  {
-                    backgroundColor: isSelected ? theme.colors.background : theme.colors.background,
-                  }
-                ]}>
-                  <Ionicons
-                    name={option.icon}
-                    size={option.iconSize}
-                    color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.modernThemeLabel,
-                    {
-                      color: isSelected ? theme.colors.text : theme.colors.text,
-                      fontSize: fontSize.sizes.body,
-                    }
-                  ]}
-                >
-                  {option.label}
-                </Text>
-                {isSelected && (
-                  <View style={styles.modernCheckmarkContainer}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color={theme.colors.iconActive}
-                    />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
       {/* Section Ville */}
       <View style={styles.section}>
         <View style={styles.sectionTitleContainer}>
           <View style={styles.titleAccent} />
           <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-            Ville
+            Villes
           </Text>
         </View>
 
-        <View style={[styles.modernThemeContainer, { flexWrap: 'wrap' }]}>
+        <View style={[styles.modernThemeContainer, { flexWrap: 'wrap', gap: 8 }]}>
           <TouchableOpacity
             style={[
               styles.modernThemeCard,
@@ -1062,15 +1011,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/bordeaux.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Bordeaux') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1105,15 +1056,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/lille.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Lille') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1148,15 +1101,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/lyon.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Lyon') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1191,15 +1146,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/marseille.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Marseille') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1234,15 +1191,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/montpellier.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Montpellier') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1277,15 +1236,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/nantes.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Nantes') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1320,15 +1281,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/nice.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Nice') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1363,15 +1326,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/paris.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Paris') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1406,15 +1371,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/rennes.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Rennes') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1449,15 +1416,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/strasbourg.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Strasbourg') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1492,15 +1461,17 @@ export default function OptionScreen() {
             <Image
               source={require('../assets/toulouse.png')}
               style={{
-                width: 70,
-                height: 70,
-                marginBottom: 8,
+                width: 55,
+                height: 55,
+                marginBottom: 4,
                 opacity: selectedCities.includes('Toulouse') ? 1 : 0.5,
                 tintColor: theme.colors.iconActive,
               }}
               resizeMode="contain"
             />
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.modernThemeLabel,
                 {
@@ -1572,11 +1543,11 @@ export default function OptionScreen() {
 
         {/* Activer les notifications (Premium uniquement) */}
         {isPremium ? (
-          <View style={[styles.notificationOption, { backgroundColor: notificationsEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5' }]}>
-            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-              <Ionicons name="notifications" size={22} color="#fff" />
+          <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+              <Ionicons name="notifications" size={22} color="#1a1a1a" />
             </View>
-            <View style={styles.notificationDivider} />
+            <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
             <View style={styles.notificationContent}>
               <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
                 Activer les notifications
@@ -1864,111 +1835,32 @@ export default function OptionScreen() {
             <Text style={[styles.filterLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
               Plage horaire
             </Text>
-            <Text style={[styles.helperText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small, marginBottom: 12 }]}>
-              Vous pouvez définir une plage qui traverse minuit (ex: 23h-2h)
-            </Text>
 
-            {/* Affichage de la plage sélectionnée */}
-            <View style={[styles.timeRangeDisplay, { backgroundColor: theme.colors.primary, borderColor: theme.colors.border }]}>
-              <View style={styles.timeRangeIconContainer}>
-                <View style={[styles.timeIconCircle, { backgroundColor: theme.colors.background }]}>
-                  <Ionicons name="time-outline" size={28} color={theme.colors.iconActive} />
-                </View>
+            <TouchableOpacity
+              style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border, marginBottom: 0 }]}
+              onPress={() => {
+                setTempStartHour(startHour);
+                setTempEndHour(endHour);
+                setTempStartMinute(startMinute);
+                setTempEndMinute(endMinute);
+                setShowTimePickerModal(true);
+              }}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+                <Ionicons name="time-outline" size={22} color="#1a1a1a" />
               </View>
-              <View style={styles.timeRangeTextContainer}>
-                <Text style={[styles.timeRangeLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
-                  Notifications actives de
+              <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
+              <View style={styles.notificationContent}>
+                <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  Plage active
                 </Text>
-                <Text style={[styles.timeRangeValue, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
-                  {startHour.toString().padStart(2, '0')}h - {endHour.toString().padStart(2, '0')}h
+                <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                  {startHour.toString().padStart(2, '0')}:{startMinute.toString().padStart(2, '0')} — {endHour.toString().padStart(2, '0')}:{endMinute.toString().padStart(2, '0')}
                 </Text>
-                {startHour > endHour && (
-                  <Text style={[styles.timeRangeLabel, { color: theme.colors.iconActive, fontSize: fontSize.sizes.small, fontStyle: 'italic', marginTop: 2 }]}>
-                    ⏰ Traverse minuit
-                  </Text>
-                )}
               </View>
-            </View>
-
-            <View style={styles.timeRangeContainer}>
-              {/* Heure de début */}
-              <View style={styles.timeSelector}>
-                <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-                  Début
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.hourScroll}
-                  contentContainerStyle={styles.hourScrollContent}
-                >
-                  {hours.map((hour) => (
-                    <TouchableOpacity
-                      key={`start-${hour}`}
-                      style={[
-                        styles.hourChip,
-                        {
-                          backgroundColor: startHour === hour ? theme.colors.primary : theme.colors.post,
-                          borderColor: startHour === hour ? theme.colors.primary : theme.colors.border,
-                        }
-                      ]}
-                      onPress={() => handleStartHourChange(hour)}
-                    >
-                      <Text
-                        style={[
-                          styles.hourText,
-                          {
-                            color: startHour === hour ? theme.colors.text : theme.colors.text,
-                            fontSize: fontSize.sizes.small,
-                          }
-                        ]}
-                      >
-                        {hour.toString().padStart(2, '0')}h
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Heure de fin */}
-              <View style={styles.timeSelector}>
-                <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small }]}>
-                  Fin
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.hourScroll}
-                  contentContainerStyle={styles.hourScrollContent}
-                >
-                  {hours.map((hour) => (
-                    <TouchableOpacity
-                      key={`end-${hour}`}
-                      style={[
-                        styles.hourChip,
-                        {
-                          backgroundColor: endHour === hour ? theme.colors.primary : theme.colors.post,
-                          borderColor: endHour === hour ? theme.colors.primary : theme.colors.border,
-                        }
-                      ]}
-                      onPress={() => handleEndHourChange(hour)}
-                    >
-                      <Text
-                        style={[
-                          styles.hourText,
-                          {
-                            color: endHour === hour ? theme.colors.text : theme.colors.text,
-                            fontSize: fontSize.sizes.small,
-                          }
-                        ]}
-                      >
-                        {hour.toString().padStart(2, '0')}h
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1985,11 +1877,11 @@ export default function OptionScreen() {
             {isPremium ? (
               <>
                 {/* Toggle récapitulatif matinal */}
-                <View style={[styles.notificationOption, { backgroundColor: morningSummaryEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5', marginBottom: 12 }]}>
-                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.iconActive }]}>
-                    <Ionicons name="sunny" size={22} color="#fff" />
+                <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border, marginBottom: 12 }]}>
+                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+                    <Ionicons name="sunny" size={22} color="#1a1a1a" />
                   </View>
-                  <View style={styles.notificationDivider} />
+                  <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
                   <View style={styles.notificationContent}>
                     <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
                       Activer le récapitulatif
@@ -2006,45 +1898,31 @@ export default function OptionScreen() {
                   />
                 </View>
 
-                {/* Sélecteur d'heure */}
+                {/* Carte heure du récapitulatif matinal */}
                 {morningSummaryEnabled && (
-                  <View style={styles.timeSelector}>
-                    <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small, marginBottom: 8 }]}>
-                      Heure du récapitulatif: {morningSummaryHour.toString().padStart(2, '0')}h00
-                    </Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.hourScroll}
-                      contentContainerStyle={styles.hourScrollContent}
-                    >
-                      {hours.map((hour) => (
-                        <TouchableOpacity
-                          key={`morning-${hour}`}
-                          style={[
-                            styles.hourChip,
-                            {
-                              backgroundColor: morningSummaryHour === hour ? theme.colors.primary : theme.colors.post,
-                              borderColor: morningSummaryHour === hour ? theme.colors.primary : theme.colors.border,
-                            }
-                          ]}
-                          onPress={() => handleMorningSummaryHourChange(hour)}
-                        >
-                          <Text
-                            style={[
-                              styles.hourText,
-                              {
-                                color: morningSummaryHour === hour ? theme.colors.text : theme.colors.text,
-                                fontSize: fontSize.sizes.small,
-                              }
-                            ]}
-                          >
-                            {hour.toString().padStart(2, '0')}h
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border, marginBottom: 0 }]}
+                    onPress={() => {
+                      setTempMorningHour(morningSummaryHour);
+                      setTempMorningMinute(morningSummaryMinute);
+                      setShowMorningPickerModal(true);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+                      <Ionicons name="alarm-outline" size={22} color="#1a1a1a" />
+                    </View>
+                    <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
+                    <View style={styles.notificationContent}>
+                      <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                        Heure d'envoi
+                      </Text>
+                      <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                        {morningSummaryHour.toString().padStart(2, '0')}:{morningSummaryMinute.toString().padStart(2, '0')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
                 )}
               </>
             ) : (
@@ -2085,11 +1963,11 @@ export default function OptionScreen() {
             {isPremium ? (
               <>
                 {/* Toggle récapitulatif du soir */}
-                <View style={[styles.notificationOption, { backgroundColor: eveningSummaryEnabled ? theme.colors.primary : theme.colors.post, borderColor: '#E5E5E5', marginBottom: 12 }]}>
-                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.iconActive }]}>
-                    <Ionicons name="moon" size={22} color="#fff" />
+                <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border, marginBottom: 12 }]}>
+                  <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+                    <Ionicons name="moon" size={22} color="#1a1a1a" />
                   </View>
-                  <View style={styles.notificationDivider} />
+                  <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
                   <View style={styles.notificationContent}>
                     <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
                       Activer le récapitulatif
@@ -2106,45 +1984,31 @@ export default function OptionScreen() {
                   />
                 </View>
 
-                {/* Sélecteur d'heure */}
+                {/* Carte heure du récapitulatif du soir */}
                 {eveningSummaryEnabled && (
-                  <View style={styles.timeSelector}>
-                    <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.small, marginBottom: 8 }]}>
-                      Heure du récapitulatif: {eveningSummaryHour.toString().padStart(2, '0')}h00
-                    </Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.hourScroll}
-                      contentContainerStyle={styles.hourScrollContent}
-                    >
-                      {hours.map((hour) => (
-                        <TouchableOpacity
-                          key={`evening-${hour}`}
-                          style={[
-                            styles.hourChip,
-                            {
-                              backgroundColor: eveningSummaryHour === hour ? theme.colors.primary : theme.colors.post,
-                              borderColor: eveningSummaryHour === hour ? theme.colors.primary : theme.colors.border,
-                            }
-                          ]}
-                          onPress={() => handleEveningSummaryHourChange(hour)}
-                        >
-                          <Text
-                            style={[
-                              styles.hourText,
-                              {
-                                color: eveningSummaryHour === hour ? theme.colors.text : theme.colors.text,
-                                fontSize: fontSize.sizes.small,
-                              }
-                            ]}
-                          >
-                            {hour.toString().padStart(2, '0')}h
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border, marginBottom: 0 }]}
+                    onPress={() => {
+                      setTempEveningHour(eveningSummaryHour);
+                      setTempEveningMinute(eveningSummaryMinute);
+                      setShowEveningPickerModal(true);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+                      <Ionicons name="alarm-outline" size={22} color="#1a1a1a" />
+                    </View>
+                    <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
+                    <View style={styles.notificationContent}>
+                      <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                        Heure d'envoi
+                      </Text>
+                      <Text style={[styles.notificationSubLabel, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+                        {eveningSummaryHour.toString().padStart(2, '0')}:{eveningSummaryMinute.toString().padStart(2, '0')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
                 )}
               </>
             ) : (
@@ -2173,6 +2037,135 @@ export default function OptionScreen() {
         )}
       </View>
 
+      {/* Section Apparence */}
+      <View style={styles.section}>
+        <View style={styles.sectionTitleContainer} ref={themeRef}>
+          <View style={styles.titleAccent} />
+          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+            Apparence
+          </Text>
+        </View>
+
+        <View style={styles.modernThemeContainer}>
+          {allThemeOptions.map((option) => {
+            const isSelected = theme.name === option.key;
+            const isLocked = option.premiumOnly && !isPremium;
+
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.modernThemeCard,
+                  {
+                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.post,
+                    borderColor: isLocked ? '#FFD700' : theme.colors.border,
+                    opacity: isLocked ? 0.6 : 1,
+                  }
+                ]}
+                onPress={() => {
+                  if (isLocked) {
+                    scrollViewRef.current?.scrollTo({ y: 1200, animated: true });
+                    return;
+                  }
+                  changeTheme(option.key);
+                  if (option.key === 'custom') {
+                    setShowColorPicker(true);
+                  }
+                }}
+                disabled={isLocked}
+              >
+                <View style={{ position: 'relative' }}>
+                  <View style={[
+                    styles.modernThemeIconContainer,
+                    { backgroundColor: isSelected ? theme.colors.background : theme.colors.background }
+                  ]}>
+                    <Ionicons
+                      name={option.icon}
+                      size={28}
+                      color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
+                    />
+                  </View>
+                  {isLocked && (
+                    <PremiumBadge size={24} style={styles.premiumBadge} />
+                  )}
+                </View>
+                <Text style={[styles.modernThemeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  {option.label}
+                </Text>
+                {isSelected && !isLocked && (
+                  <View style={styles.modernCheckmarkContainer}>
+                    <Ionicons name="checkmark-circle" size={24} color={theme.colors.iconActive} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {theme.name === 'custom' && (
+          <View style={styles.colorPickerContainer}>
+            <TouchableOpacity
+              style={[styles.colorPickerButton, { backgroundColor: theme.colors.primary, borderColor: theme.colors.border }]}
+              onPress={() => setShowColorPicker(true)}
+            >
+              <View style={[styles.colorPreview, { backgroundColor: customColor }]} />
+              <Text style={[styles.colorPickerButtonText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                Personnaliser la couleur
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.iconActive} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Section Taille de police */}
+      <View style={styles.section}>
+        <View style={styles.sectionTitleContainer}>
+          <View style={styles.titleAccent} />
+          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+            Taille de police
+          </Text>
+        </View>
+
+        <View style={styles.modernThemeContainer}>
+          {fontSizeOptions.map((option) => {
+            const isSelected = fontSize.name === option.key;
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.modernThemeCard,
+                  {
+                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.post,
+                    borderColor: theme.colors.border,
+                  }
+                ]}
+                onPress={() => changeFontSize(option.key)}
+              >
+                <View style={[
+                  styles.modernThemeIconContainer,
+                  { backgroundColor: isSelected ? theme.colors.background : theme.colors.background }
+                ]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={option.iconSize}
+                    color={isSelected ? theme.colors.iconActive : theme.colors.iconInactive}
+                  />
+                </View>
+                <Text style={[styles.modernThemeLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                  {option.label}
+                </Text>
+                {isSelected && (
+                  <View style={styles.modernCheckmarkContainer}>
+                    <Ionicons name="checkmark-circle" size={24} color={theme.colors.iconActive} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       {/* Section Compte */}
       <View style={styles.section}>
         <View style={styles.sectionTitleContainer}>
@@ -2199,7 +2192,7 @@ export default function OptionScreen() {
               Lini Premium
             </Text>
             <Text style={[styles.notificationSubLabel, { color: '#000', opacity: 0.7, fontSize: fontSize.sizes.small, marginTop: 2 }]}>
-              Profitez de Lini sans publicité pour 2.99€/mois
+              Profitez de toutes les fonctionnalités pour 2.99€/mois
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#000" />
@@ -2207,11 +2200,11 @@ export default function OptionScreen() {
 
         {/* Masquer les noms de famille (Premium uniquement) */}
         {isPremium ? (
-          <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: '#E5E5E5' }]}>
-            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-              <Ionicons name="eye-off-outline" size={22} color="#fff" />
+          <View style={[styles.notificationOption, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+            <View style={[styles.notificationIconContainer, { backgroundColor: theme.colors.primary }]}>
+              <Ionicons name="eye-off-outline" size={22} color="#1a1a1a" />
             </View>
-            <View style={styles.notificationDivider} />
+            <View style={[styles.notificationDivider, { backgroundColor: theme.colors.primary, opacity: 1 }]} />
             <View style={styles.notificationContent}>
               <Text style={[styles.notificationLabel, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
                 Masquer les noms de famille
@@ -2259,8 +2252,8 @@ export default function OptionScreen() {
           onPress={() => setPasswordModalVisible(true)}
           disabled={loading}
         >
-          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-            <Ionicons name="key-outline" size={22} color="#fff" />
+          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.primary }]}>
+            <Ionicons name="key-outline" size={22} color="#1a1a1a" />
           </View>
           <View style={styles.accountDivider} />
           <View style={styles.accountContent}>
@@ -2280,8 +2273,8 @@ export default function OptionScreen() {
           onPress={handleLogout}
           disabled={loading}
         >
-          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-            <Ionicons name="log-out-outline" size={22} color="#fff" />
+          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.primary }]}>
+            <Ionicons name="log-out-outline" size={22} color="#1a1a1a" />
           </View>
           <View style={styles.accountDivider} />
           <View style={styles.accountContent}>
@@ -2330,8 +2323,8 @@ export default function OptionScreen() {
           ]}
           onPress={handleRestartWalkthrough}
         >
-          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-            <Ionicons name="help-circle-outline" size={22} color="#fff" />
+          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.primary }]}>
+            <Ionicons name="help-circle-outline" size={22} color="#1a1a1a" />
           </View>
           <View style={styles.accountDivider} />
           <View style={styles.accountContent}>
@@ -2352,8 +2345,8 @@ export default function OptionScreen() {
           ]}
           onPress={() => Linking.openURL('https://anonyma93.github.io/Politique_de_confidentialit-/privacy-policy.html')}
         >
-          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.cardBackgroundColor }]}>
-            <Ionicons name="shield-checkmark-outline" size={22} color="#fff" />
+          <View style={[styles.accountIconContainer, { backgroundColor: theme.colors.primary }]}>
+            <Ionicons name="shield-checkmark-outline" size={22} color="#1a1a1a" />
           </View>
           <View style={styles.accountDivider} />
           <View style={styles.accountContent}>
@@ -2724,6 +2717,219 @@ export default function OptionScreen() {
         </View>
       </Modal>
       </ScrollView>
+      {/* Modal récapitulatif matinal */}
+      <Modal
+        visible={showMorningPickerModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMorningPickerModal(false)}
+      >
+        <View style={styles.timeModalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowMorningPickerModal(false)} />
+          <View style={[styles.timeModalContent, { backgroundColor: theme.colors.background }]}>
+            <View style={[styles.timeModalHandle, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.timeModalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              Récapitulatif matinal
+            </Text>
+            <Text style={[styles.timeModalSummary, { color: theme.colors.iconActive }]}>
+              {tempMorningHour.toString().padStart(2, '0')}:{tempMorningMinute.toString().padStart(2, '0')}
+            </Text>
+            <View style={[styles.timeModalPickerContainer, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+              <DrumPicker
+                items={HOURS}
+                value={tempMorningHour}
+                onChange={setTempMorningHour}
+                theme={theme}
+                cardBackground={theme.colors.post}
+                formatItem={(v) => v.toString().padStart(2, '0')}
+              />
+              <Text style={[styles.timePickerColon, { color: theme.colors.text }]}>:</Text>
+              <DrumPicker
+                items={DRUM_MINUTES}
+                value={tempMorningMinute}
+                onChange={setTempMorningMinute}
+                theme={theme}
+                cardBackground={theme.colors.post}
+                formatItem={(v) => v.toString().padStart(2, '0')}
+              />
+            </View>
+            <View style={styles.timeModalButtons}>
+              <TouchableOpacity
+                style={[styles.timeModalCancel, { backgroundColor: theme.colors.iconActive }]}
+                onPress={() => setShowMorningPickerModal(false)}
+              >
+                <Text style={[styles.timeModalCancelText, { color: '#fff', fontSize: fontSize.sizes.body }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeModalConfirm, { backgroundColor: theme.colors.primary }]}
+                onPress={() => {
+                  saveMorningSummary(tempMorningHour, tempMorningMinute);
+                  setShowMorningPickerModal(false);
+                }}
+              >
+                <Text style={[styles.timeModalConfirmText, { fontSize: fontSize.sizes.body }]}>Confirmer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal récapitulatif du soir */}
+      <Modal
+        visible={showEveningPickerModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEveningPickerModal(false)}
+      >
+        <View style={styles.timeModalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowEveningPickerModal(false)} />
+          <View style={[styles.timeModalContent, { backgroundColor: theme.colors.background }]}>
+            <View style={[styles.timeModalHandle, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.timeModalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              Récapitulatif du soir
+            </Text>
+            <Text style={[styles.timeModalSummary, { color: theme.colors.iconActive }]}>
+              {tempEveningHour.toString().padStart(2, '0')}:{tempEveningMinute.toString().padStart(2, '0')}
+            </Text>
+            <View style={[styles.timeModalPickerContainer, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+              <DrumPicker
+                items={HOURS}
+                value={tempEveningHour}
+                onChange={setTempEveningHour}
+                theme={theme}
+                cardBackground={theme.colors.post}
+                formatItem={(v) => v.toString().padStart(2, '0')}
+              />
+              <Text style={[styles.timePickerColon, { color: theme.colors.text }]}>:</Text>
+              <DrumPicker
+                items={DRUM_MINUTES}
+                value={tempEveningMinute}
+                onChange={setTempEveningMinute}
+                theme={theme}
+                cardBackground={theme.colors.post}
+                formatItem={(v) => v.toString().padStart(2, '0')}
+              />
+            </View>
+            <View style={styles.timeModalButtons}>
+              <TouchableOpacity
+                style={[styles.timeModalCancel, { backgroundColor: theme.colors.iconActive }]}
+                onPress={() => setShowEveningPickerModal(false)}
+              >
+                <Text style={[styles.timeModalCancelText, { color: '#fff', fontSize: fontSize.sizes.body }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeModalConfirm, { backgroundColor: theme.colors.primary }]}
+                onPress={() => {
+                  saveEveningSummary(tempEveningHour, tempEveningMinute);
+                  setShowEveningPickerModal(false);
+                }}
+              >
+                <Text style={[styles.timeModalConfirmText, { fontSize: fontSize.sizes.body }]}>Confirmer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal plage horaire */}
+      <Modal
+        visible={showTimePickerModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTimePickerModal(false)}
+      >
+        <View style={styles.timeModalOverlay}>
+          {/* Backdrop : ferme le modal si on tape en dehors */}
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setShowTimePickerModal(false)}
+          />
+          {/* Contenu : séparé du backdrop, les ScrollViews fonctionnent normalement */}
+          <View style={[styles.timeModalContent, { backgroundColor: theme.colors.background }]}>
+              {/* Handle */}
+              <View style={[styles.timeModalHandle, { backgroundColor: theme.colors.border }]} />
+
+              <Text style={[styles.timeModalTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+                Plage horaire
+              </Text>
+
+              <Text style={[styles.timeModalSummary, { color: theme.colors.iconActive }]}>
+                {tempStartHour.toString().padStart(2, '0')}:{tempStartMinute.toString().padStart(2, '0')} — {tempEndHour.toString().padStart(2, '0')}:{tempEndMinute.toString().padStart(2, '0')}
+              </Text>
+
+              {/* Pickers — une seule ligne unifiée HH:MM → HH:MM */}
+              <View style={[styles.timeModalPickerContainer, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
+                <DrumPicker
+                  items={HOURS}
+                  value={tempStartHour}
+                  onChange={setTempStartHour}
+                  theme={theme}
+                  cardBackground={theme.colors.post}
+                  formatItem={(v) => v.toString().padStart(2, '0')}
+                />
+                <Text style={[styles.timePickerColon, { color: theme.colors.text }]}>:</Text>
+                <DrumPicker
+                  items={DRUM_MINUTES}
+                  value={tempStartMinute}
+                  onChange={setTempStartMinute}
+                  theme={theme}
+                  cardBackground={theme.colors.post}
+                  formatItem={(v) => v.toString().padStart(2, '0')}
+                />
+                <Text style={[styles.timePickerArrow, { color: theme.colors.textSecondary }]}>→</Text>
+                <DrumPicker
+                  items={HOURS}
+                  value={tempEndHour}
+                  onChange={setTempEndHour}
+                  theme={theme}
+                  cardBackground={theme.colors.post}
+                  formatItem={(v) => v.toString().padStart(2, '0')}
+                />
+                <Text style={[styles.timePickerColon, { color: theme.colors.text }]}>:</Text>
+                <DrumPicker
+                  items={DRUM_MINUTES}
+                  value={tempEndMinute}
+                  onChange={setTempEndMinute}
+                  theme={theme}
+                  cardBackground={theme.colors.post}
+                  formatItem={(v) => v.toString().padStart(2, '0')}
+                />
+              </View>
+
+              {/* Boutons */}
+              <View style={styles.timeModalButtons}>
+                <TouchableOpacity
+                  style={[styles.timeModalCancel, { backgroundColor: theme.colors.iconActive }]}
+                  onPress={() => setShowTimePickerModal(false)}
+                >
+                  <Text style={[styles.timeModalCancelText, { color: '#fff', fontSize: fontSize.sizes.body }]}>
+                    Annuler
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.timeModalConfirm, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => {
+                    setStartHour(tempStartHour);
+                    setEndHour(tempEndHour);
+                    setStartMinute(tempStartMinute);
+                    setEndMinute(tempEndMinute);
+                    saveNotificationPreferences(
+                      notificationsEnabled, notificationType, selectedSeverities, selectedDays,
+                      tempStartHour, tempEndHour, tempStartMinute, tempEndMinute
+                    );
+                    setShowTimePickerModal(false);
+                  }}
+                >
+                  <Text style={[styles.timeModalConfirmText, { fontSize: fontSize.sizes.body }]}>
+                    Confirmer
+                  </Text>
+                </TouchableOpacity>
+              </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScreenGuide screenName="Options" />
     </KeyboardAvoidingView>
   );
@@ -2802,17 +3008,17 @@ const styles = StyleSheet.create({
   modernThemeCard: {
     width: '31%',
     borderRadius: 16,
-    padding: 16,
+    padding: 10,
     borderWidth: 1,
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
     position: 'relative',
-    minHeight: 120,
+    minHeight: 90,
     justifyContent: 'center',
   },
   modernThemeIconContainer: {
@@ -2968,6 +3174,126 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     fontFamily: 'Fredoka_600SemiBold',
+  },
+  timeRangeTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0,
+    gap: 12,
+  },
+  timeRangeIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timeRangeInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  timeRangeInfoLabel: {
+    fontFamily: 'Fredoka_400Regular',
+  },
+  timeRangeInfoValue: {
+    fontFamily: 'Fredoka_700Bold',
+  },
+  timeModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  timeModalContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 44,
+    alignItems: 'center',
+    gap: 20,
+  },
+  timeModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  timeModalTitle: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  timeModalSummary: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 32,
+    letterSpacing: 1,
+  },
+  timeModalPickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  timeModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  timeModalCancel: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  timeModalCancelText: {
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  timeModalConfirm: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  timeModalConfirmText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#1a1a1a',
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+  },
+  timePickerColumn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  timePickerLabel: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 1.5,
+  },
+  timePickerHMRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timePickerColon: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 22,
+    paddingHorizontal: 2,
+    zIndex: 3,
+  },
+  timePickerArrow: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 20,
+    paddingHorizontal: 6,
+    zIndex: 3,
+  },
+  timePickerDivider: {
+    width: 1,
+    marginVertical: 20,
   },
   timeRangeDisplay: {
     flexDirection: 'row',

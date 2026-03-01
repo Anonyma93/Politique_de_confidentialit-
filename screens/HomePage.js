@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
@@ -277,12 +277,17 @@ export default function HomePage({ navigation }) {
   // Lignes impactées dans la dernière heure (exclut gravité Sans et Minime, et les posts info)
   const getImpactedLines = () => {
     const postsLastHour = getPostsLastHour();
-    // Filtrer les posts avec gravité différente de 'sans' et 'minime', et exclure les posts de type 'info'
     const significantPosts = postsLastHour.filter(post =>
       post.postType !== 'info' && post.severity !== 'sans' && post.severity !== 'minime'
     );
     const uniqueLines = [...new Set(significantPosts.map(post => post.line))];
-    return uniqueLines.map(lineValue => lignes.find(l => l.value === lineValue)).filter(Boolean);
+    return uniqueLines
+      .map(lineValue => {
+        const ligne = lignes.find(l => l.value === lineValue);
+        const count = significantPosts.filter(p => p.line === lineValue).length;
+        return ligne ? { ligne, count } : null;
+      })
+      .filter(Boolean);
   };
 
   // Post avec le plus de likes
@@ -340,6 +345,20 @@ export default function HomePage({ navigation }) {
         return '#BE1313'; // Rouge foncé
       default:
         return 'transparent'; // Pas de contour par défaut
+    }
+  };
+
+  // Obtenir le label de durée estimée
+  const getDurationLabel = (duration) => {
+    switch (duration) {
+      case '15min': return '15 min';
+      case '30min': return '30 min';
+      case '1h': return '1 heure';
+      case '2h': return '2 heures';
+      case 'half_day': return 'Demi-journée';
+      case 'full_day': return 'Journée';
+      case 'unknown': return 'Durée inconnue';
+      default: return null;
     }
   };
 
@@ -403,7 +422,7 @@ export default function HomePage({ navigation }) {
         ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={{
-          paddingBottom: 100,
+          paddingBottom: Platform.OS === 'android' ? 150 : 100,
           alignItems: isTablet ? 'center' : 'stretch',
         }}
       >
@@ -532,14 +551,17 @@ export default function HomePage({ navigation }) {
         <View style={[styles.impactedLinesCard, { backgroundColor: theme.colors.post, borderColor: theme.colors.border }]}>
           {impactedLines.length > 0 ? (
             <View style={styles.linesContainer}>
-              {impactedLines.map((ligne) => (
-                <View
-                  key={ligne.value}
-                  style={[styles.lineBadge, { backgroundColor: ligne.backgroundColor }]}
-                >
-                  <Text style={[styles.lineBadgeText, { color: ligne.color }]}>
-                    {ligne.label}
-                  </Text>
+              {impactedLines.map(({ ligne, count }) => (
+                <View key={ligne.value} style={styles.lineBadgeWrapper}>
+                  <View style={[styles.lineBadge, { backgroundColor: ligne.backgroundColor }]}>
+                    <Text style={[styles.lineBadgeText, { color: ligne.color }]}>
+                      {ligne.label}
+                    </Text>
+                  </View>
+                  {/* Pastille nombre de posts */}
+                  <View style={styles.lineBadgeCount}>
+                    <Text style={styles.lineBadgeCountText}>{count}</Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -717,6 +739,24 @@ export default function HomePage({ navigation }) {
                       {topPost.incident}
                     </Text>
                   </View>
+
+                  {/* Badge durée estimée */}
+                  {topPost.estimatedDuration && getDurationLabel(topPost.estimatedDuration) && (
+                    <View style={[
+                      styles.badge,
+                      {
+                        backgroundColor: 'rgba(255, 149, 0, 0.15)',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      }
+                    ]}>
+                      <Ionicons name="time-outline" size={12} color="#FF9500" />
+                      <Text style={[styles.badgeText, { color: '#FF9500' }]}>
+                        {getDurationLabel(topPost.estimatedDuration)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
@@ -886,14 +926,16 @@ const styles = StyleSheet.create({
   linesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 16,
+    paddingTop: 6,
+  },
+  lineBadgeWrapper: {
+    position: 'relative',
   },
   lineBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    minWidth: 90,
-    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
@@ -903,6 +945,23 @@ const styles = StyleSheet.create({
   lineBadgeText: {
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 12,
+  },
+  lineBadgeCount: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+  },
+  lineBadgeCountText: {
+    color: '#fff',
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 11,
   },
   emptyState: {
     paddingVertical: 20,

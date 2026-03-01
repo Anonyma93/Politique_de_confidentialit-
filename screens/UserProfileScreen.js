@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { getUserData, getCurrentUser } from '../services/authService';
+import { getUserData, getCurrentUser, getGradeFromScore } from '../services/authService';
 import { lignes } from '../data/lignes';
 import { formatUserName } from '../utils/formatUserName';
 
@@ -29,20 +29,6 @@ const GRADE_ICONS = {
   'Touriste': require('../icon/touriste.png'),
 };
 
-// Fonction pour calculer le grade à partir du score - Synchronisée avec authService.js
-const getGradeFromScore = (score) => {
-  if (score >= 4.50) return 'Guide suprême';
-  if (score >= 3.50) return 'Légende Métropolitaine';
-  if (score >= 2.80) return 'Ministre du transport';
-  if (score >= 2.30) return 'Sauveur de ligne';
-  if (score >= 1.80) return 'Dompteur de Navigo';
-  if (score >= 1.40) return 'Pro du Strapontin';
-  if (score >= 1.10) return 'Inspecteur Réseau';
-  if (score >= 0.80) return 'Contrôleur';
-  if (score >= 0.55) return 'Chef de Quai';
-  if (score >= 0.30) return 'Agent de Bord';
-  return 'Touriste';
-};
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params;

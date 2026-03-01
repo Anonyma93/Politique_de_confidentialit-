@@ -447,7 +447,7 @@ export default function PostScreen({ navigation }) {
           ref={scrollViewRef}
           style={styles.container}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Platform.OS === 'android' ? 150 : 100 }]}
         >
         {/* Titre de la page */}
         <View style={[styles.pageHeader, { backgroundColor: 'transparent' }]}>

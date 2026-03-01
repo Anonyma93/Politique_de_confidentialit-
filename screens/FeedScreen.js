@@ -11,6 +11,7 @@ import {
   Animated,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import ScreenGuide from '../components/ScreenGuide';
 import { lignes } from '../data/lignes';
 import { getCurrentUser, getUserData, incrementLikesCount, decrementLikesCount, incrementLikesGiven, decrementLikesGiven } from '../services/authService';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { setBadgeCount } from '../services/notificationService';
 import { notifyLike, markAllNotificationsAsRead } from '../services/internalNotificationService';
@@ -288,14 +289,14 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onOpenCo
                 <View style={[
                   styles.badge,
                   {
-                    backgroundColor: theme.colors.navbar,
+                    backgroundColor: 'rgba(255, 149, 0, 0.15)',
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 4,
                   }
                 ]}>
-                  <Ionicons name="time-outline" size={12} color={theme.colors.textSecondary} />
-                  <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>
+                  <Ionicons name="time-outline" size={12} color="#FF9500" />
+                  <Text style={[styles.badgeText, { color: '#FF9500' }]}>
                     {getDurationLabel(post.estimatedDuration)}
                   </Text>
                 </View>
@@ -514,7 +515,7 @@ export default function FeedScreen({ navigation }) {
       if (hasLiked) {
         // Unlike
         await updateDoc(postRef, {
-          likesCount: post.likesCount - 1,
+          likesCount: increment(-1),
           likedBy: arrayRemove(currentUser.uid),
         });
         // Décrémenter les likes de l'auteur
@@ -524,7 +525,7 @@ export default function FeedScreen({ navigation }) {
       } else {
         // Like
         await updateDoc(postRef, {
-          likesCount: post.likesCount + 1,
+          likesCount: increment(1),
           likedBy: arrayUnion(currentUser.uid),
         });
         // Incrémenter les likes de l'auteur
@@ -1147,41 +1148,50 @@ export default function FeedScreen({ navigation }) {
       </View>
 
       {/* Liste des posts */}
-      {filteredPosts.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="newspaper-outline" size={64} color={theme.colors.iconInactive} />
-          <Text style={[styles.emptyTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
-            {posts.length === 0 ? 'Aucun incident signalé' : 'Aucun résultat'}
-          </Text>
-          <Text style={[styles.emptyText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
-            {posts.length === 0
-              ? 'Soyez le premier à partager une info trafic !'
-              : 'Essayez de modifier vos filtres'}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={filteredPosts}
-          renderItem={renderPost}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            isTablet && { alignSelf: 'center', maxWidth: maxContentWidth }
-          ]}
-          ListHeaderComponent={
-            <AnimatedMetroRefresh refreshing={refreshing} theme={theme} />
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="transparent"
-              colors={['transparent']}
-            />
-          }
-        />
-      )}
+      <FlatList
+        ref={flatListRef}
+        data={filteredPosts}
+        renderItem={renderPost}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredPosts.length === 0 && styles.listContentEmpty,
+          isTablet && { alignSelf: 'center', maxWidth: maxContentWidth },
+          Platform.OS === 'android' && { paddingBottom: 150 },
+        ]}
+        ListHeaderComponent={
+          filteredPosts.length > 0
+            ? <AnimatedMetroRefresh refreshing={refreshing} theme={theme} />
+            : null
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconWrapper, { backgroundColor: theme.colors.primary }]}>
+              <Ionicons
+                name={posts.length === 0 ? 'train-outline' : 'options-outline'}
+                size={44}
+                color="#1a1a1a"
+              />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+              {posts.length === 0 ? 'Aucun incident signalé' : 'Aucun résultat'}
+            </Text>
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
+              {posts.length === 0
+                ? 'Soyez le premier à partager une info trafic !'
+                : 'Essayez de modifier vos filtres'}
+            </Text>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="transparent"
+            colors={['transparent']}
+          />
+        }
+      />
 
       {/* Modal des commentaires */}
       <CommentsModal
@@ -1215,12 +1225,12 @@ export default function FeedScreen({ navigation }) {
 
             {/* Titre */}
             <Text style={[styles.adTitle, { color: theme.colors.text, fontSize: fontSize.sizes.title }]}>
-              Profitez de Lini sans publicité
+              Profitez de toutes les fonctionnalités
             </Text>
 
             {/* Description */}
             <Text style={[styles.adDescription, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
-              Passez à Lini Premium pour seulement 2,99€/mois et profitez d'une expérience sans interruption
+              Passez à Lini Premium pour seulement 2,99€/mois et débloquez toutes les fonctionnalités exclusives
             </Text>
 
             {/* Boutons */}
@@ -1544,13 +1554,28 @@ const styles = StyleSheet.create({
   lineBadgeTopLeftText: {
     fontFamily: 'Fredoka_600SemiBold',
   },
+  listContentEmpty: {
+    flex: 1,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-    gap: 15,
-    zIndex: 1,
+    paddingHorizontal: 40,
+    gap: 16,
+  },
+  emptyIconWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 4,
   },
   emptyTitle: {
     fontFamily: 'Fredoka_600SemiBold',

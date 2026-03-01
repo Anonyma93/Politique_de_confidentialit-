@@ -578,7 +578,8 @@ export const incrementPostsCount = async () => {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
 
-      // Mettre à jour automatiquement le score
+      // Mise à jour du streak avant le score (le score lit le streak depuis Firestore)
+      await updateStreak(user.uid);
       await updateUserScore(user.uid);
 
       return { success: true, newCount: currentCount + 1 };
@@ -646,7 +647,8 @@ export const incrementLikesGiven = async (userId = null) => {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
 
-      // Mettre à jour automatiquement le score
+      // Mise à jour du streak avant le score (le score lit le streak depuis Firestore)
+      await updateStreak(targetUserId);
       await updateUserScore(targetUserId);
 
       return { success: true, newCount: currentCount + 1 };
@@ -728,6 +730,45 @@ export const decrementLikesCount = async (userId = null) => {
 };
 
 /**
+ * Mettre à jour le streak de l'utilisateur
+ *
+ * Un streak progresse si l'utilisateur est actif (post ou like) chaque jour.
+ * Un jour sans activité remet le streak à 1 dès la prochaine action.
+ *
+ * Champs Firestore : lastActivityDate (YYYY-MM-DD), currentStreak, maxStreak
+ */
+export const updateStreak = async (userId = null) => {
+  try {
+    const targetUserId = userId || auth.currentUser?.uid;
+    if (!targetUserId) return;
+
+    const userRef = doc(db, 'users', targetUserId);
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) return;
+
+    const userData = userDoc.data();
+    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" UTC
+    const lastActivityDate = userData.lastActivityDate || null;
+
+    // Déjà actif aujourd'hui → pas de changement
+    if (lastActivityDate === today) return;
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const currentStreak = userData.currentStreak || 0;
+    const newStreak = lastActivityDate === yesterday ? currentStreak + 1 : 1;
+    const newMaxStreak = Math.max(newStreak, userData.maxStreak || 0);
+
+    await setDoc(userRef, {
+      lastActivityDate: today,
+      currentStreak: newStreak,
+      maxStreak: newMaxStreak,
+    }, { merge: true });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du streak:', error);
+  }
+};
+
+/**
  * Obtenir le nombre total d'utilisateurs
  */
 export const getTotalUsersCount = async () => {
@@ -744,14 +785,20 @@ export const getTotalUsersCount = async () => {
 /**
  * Calculer le score d'un utilisateur
  *
- * Le score prend en compte :
- * - Engagement Rate : likesCount / postsCount (qualité)
- * - Activity Bonus : log(postsCount + 1) (activité)
- * - Normalisation : divisé par le nombre total d'utilisateurs
+ * 5 composantes indépendantes :
  *
- * Formule : (likesCount / postsCount) * (1 + log(postsCount + 1)) / sqrt(totalUsers)
+ * 1. engagementRate  : qualité (likes/post, plafonné à 10)
+ * 2. activityBonus   : fréquence de publication (log)
+ * 3. volumeBonus     : contribution brute totale (total likes reçus, log)
+ *                      → différencie 50posts/50likes de 10posts/10likes
+ * 4. involvementBonus: implication communautaire (likes donnés, plafonné)
+ * 5. seniorityBonus  : ancienneté du compte (log)
+ * 6. streakBonus     : régularité (paliers : 3j, 7j, 14j, 30j)
  *
- * @param {string} userId - ID de l'utilisateur (optionnel, utilise l'utilisateur connecté par défaut)
+ * Formule : (engagementRate × (1 + activityBonus) + volumeBonus
+ *            + involvementBonus + seniorityBonus + streakBonus + baseBonus) / 3.0
+ *
+ * @param {string} userId - ID de l'utilisateur (optionnel)
  * @returns {Object} - { success, score, engagementRate }
  */
 export const calculateUserScore = async (userId = null) => {
@@ -773,36 +820,49 @@ export const calculateUserScore = async (userId = null) => {
     const postsCount = userData.postsCount || 0;
     const likesCount = userData.likesCount || 0;
     const likesGiven = userData.likesGiven || 0;
+    const currentStreak = userData.currentStreak || 0;
+    const createdAt = userData.createdAt || null;
 
-    // Calculer l'engagement rate (likes moyens par post)
-    const engagementRate = postsCount > 0 ? likesCount / postsCount : 0;
+    // 1. Qualité : ratio likes/post plafonné à 10 (évite l'explosion avec peu de posts)
+    const engagementRate = postsCount > 0 ? Math.min(likesCount / postsCount, 10) : 0;
 
-    // Calculer le bonus d'activité (logarithmique)
-    // Coefficient de 0.35 pour une progression plus lente
+    // 2. Activité : fréquence de publication (logarithmique)
     const activityBonus = Math.log(postsCount + 1) * 0.35;
 
-    // Calculer le bonus d'implication (likes donnés)
-    // Coefficient de 0.35 pour équilibrer avec l'activité
-    const involvementBonus = Math.log(likesGiven + 1) * 0.35;
+    // 3. Volume : contribution brute — ce qui différencie 50/50 de 10/10 avec le même ratio
+    const volumeBonus = Math.log(likesCount + 1) * 0.3;
 
-    // Bonus de base pour les utilisateurs actifs (réduit pour ralentir la progression initiale)
+    // 4. Implication communautaire : plafonné à postsCount × 10 pour éviter le like-farming
+    const likesGivenCapped = Math.min(likesGiven, (postsCount + 1) * 10);
+    const involvementBonus = Math.log(likesGivenCapped + 1) * 0.2;
+
+    // 5. Ancienneté : récompense la fidélité sur la durée
+    const daysOnPlatform = createdAt
+      ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000)
+      : 0;
+    const seniorityBonus = Math.log(daysOnPlatform + 1) * 0.15;
+
+    // 6. Streak : bonus de régularité (post ou like chaque jour)
+    //    3 jours → +0.1 | 7 jours → +0.3 | 14 jours → +0.6 | 30 jours → +1.0
+    let streakBonus = 0;
+    if (currentStreak >= 30) streakBonus = 1.0;
+    else if (currentStreak >= 14) streakBonus = 0.6;
+    else if (currentStreak >= 7) streakBonus = 0.3;
+    else if (currentStreak >= 3) streakBonus = 0.1;
+
+    // Bonus de base pour les utilisateurs actifs
     const baseBonus = postsCount > 0 ? 0.25 : 0;
 
-    // Obtenir le nombre total d'utilisateurs pour la normalisation
-    const totalUsersResult = await getTotalUsersCount();
-    const totalUsers = totalUsersResult.count || 1;
+    // Score final : normalisation fixe (indépendante du nombre d'utilisateurs)
+    const baseScore = engagementRate * (1 + activityBonus)
+      + volumeBonus
+      + involvementBonus
+      + seniorityBonus
+      + streakBonus
+      + baseBonus;
 
-    // Score de base : engagement × (1 + activité + implication) + bonus de base
-    const baseScore = (engagementRate * (1 + activityBonus + involvementBonus)) + baseBonus;
-
-    // Normalisation BEAUCOUP moins punitive
-    // Au lieu de diviser par sqrt(totalUsers), on divise par log(totalUsers + 1)
-    // Cela réduit drastiquement la pénalité liée au nombre d'utilisateurs
-    const normalizationFactor = Math.max(1, Math.log(totalUsers + 1) / 2);
-    const normalizedScore = baseScore / normalizationFactor;
-
-    // Arrondir à 2 décimales
-    const userScore = Math.round(normalizedScore * 100) / 100;
+    const NORMALIZATION = 3.0;
+    const userScore = Math.round((baseScore / NORMALIZATION) * 100) / 100;
     const roundedEngagementRate = Math.round(engagementRate * 100) / 100;
 
     return {
@@ -813,9 +873,13 @@ export const calculateUserScore = async (userId = null) => {
         postsCount,
         likesCount,
         likesGiven,
+        currentStreak,
+        daysOnPlatform,
         activityBonus: Math.round(activityBonus * 100) / 100,
+        volumeBonus: Math.round(volumeBonus * 100) / 100,
         involvementBonus: Math.round(involvementBonus * 100) / 100,
-        totalUsers,
+        seniorityBonus: Math.round(seniorityBonus * 100) / 100,
+        streakBonus,
       }
     };
   } catch (error) {

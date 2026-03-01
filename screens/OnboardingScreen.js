@@ -17,8 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../context/ThemeContext';
 import { signUp } from '../services/authService';
-import { lignes } from '../data/lignes';
-import { getStationsByPreferredLines } from '../data/stations';
+import { lignes, stations } from '../data/lignes';
 import { useResponsive } from '../utils/responsive';
 
 
@@ -78,8 +77,9 @@ export default function OnboardingScreen({ navigation, route }) {
   // Mettre à jour les stations disponibles quand les lignes préférées changent
   useEffect(() => {
     if (selectedLines.length > 0) {
-      const stations = getStationsByPreferredLines(selectedLines);
-      setAvailableStations(stations);
+      const allStations = selectedLines.flatMap(line => stations[line] || []);
+      const uniqueStations = [...new Set(allStations)].sort();
+      setAvailableStations(uniqueStations);
     } else {
       setAvailableStations([]);
     }
@@ -157,7 +157,7 @@ export default function OnboardingScreen({ navigation, route }) {
     const categories = {
       'Métro': cityLines.filter(l => l.label.startsWith('Métro ')),
       'RER': cityLines.filter(l => l.label.startsWith('RER ')),
-      'Tram': cityLines.filter(l => l.label.startsWith('Tram ')),
+      'Tram': cityLines.filter(l => l.label.startsWith('Tram ') || l.label.startsWith('Tramway ')),
       'Transilien': cityLines.filter(l => l.label.startsWith('Ligne ')),
     };
     return categories;
@@ -186,9 +186,11 @@ export default function OnboardingScreen({ navigation, route }) {
         return;
       }
 
-      // Mettre à jour les préférences
-      const linesResult = await updatePreferredLines(currentUser.uid, selectedLines);
-      const stationsResult = await updatePreferredStations(currentUser.uid, selectedStations);
+      // Mettre à jour les préférences et la ville
+      const { updateUserProfile } = await import('../services/authService');
+      const linesResult = await updatePreferredLines(selectedLines);
+      const stationsResult = await updatePreferredStations(selectedStations);
+      await updateUserProfile({ city: selectedCity, cities: [selectedCity] });
       setLoading(false);
 
       if (linesResult.success && stationsResult.success) {
