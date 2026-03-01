@@ -17,6 +17,8 @@ try {
 
 // Configuration RevenueCat
 const REVENUECAT_API_KEY_IOS = 'appl_WlbpXfZwhjOxiQaXTxccqqoiehe';
+const REVENUECAT_API_KEY_ANDROID = 'goog_IGzZSALIJItcwqJOBGZltwSmHTg'; // goog_XXXXXXXXXXXX
+const REVENUECAT_API_KEY = Platform.OS === 'android' ? REVENUECAT_API_KEY_ANDROID : REVENUECAT_API_KEY_IOS;
 const ENTITLEMENT_ID = 'premium';
 
 // Flags pour l'état de RevenueCat
@@ -35,11 +37,9 @@ const ensureInitialized = async () => {
   }
 
   try {
-    if (Platform.OS === 'ios') {
-      await Purchases.configure({ apiKey: REVENUECAT_API_KEY_IOS });
-      isInitialized = true;
-      console.log('✅ RevenueCat auto-initialisé');
-    }
+    await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+    isInitialized = true;
+    console.log('✅ RevenueCat auto-initialisé');
   } catch (error) {
     console.error('❌ Erreur auto-init RevenueCat:', error);
   }
@@ -57,8 +57,8 @@ export const initializeIAP = async (userId = null) => {
 
   try {
     // Configurer RevenueCat si pas encore fait
-    if (!isInitialized && Platform.OS === 'ios') {
-      await Purchases.configure({ apiKey: REVENUECAT_API_KEY_IOS });
+    if (!isInitialized) {
+      await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
       isInitialized = true;
       console.log('✅ RevenueCat configuré');
     }

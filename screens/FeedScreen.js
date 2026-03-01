@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,9 +33,184 @@ import AnimatedMetroRefresh from '../components/AnimatedMetroRefresh';
 import { formatUserName } from '../utils/formatUserName';
 import { useResponsive } from '../utils/responsive';
 import { usePremium } from '../context/PremiumContext';
+import { submitReport } from '../services/reportService';
+
+// Raisons de signalement
+const REPORT_REASONS = [
+  { key: 'spam', label: 'Spam ou hors-sujet' },
+  { key: 'inappropriate', label: 'Contenu inapproprié' },
+  { key: 'dangerous', label: 'Contenu dangereux' },
+  { key: 'misinformation', label: 'Désinformation' },
+];
+
+// Modal de signalement (BottomSheet-style)
+const ReportModal = ({ visible, onClose, onSubmit, theme, fontSize }) => {
+  const [selectedReason, setSelectedReason] = useState(null);
+
+  const handleClose = () => {
+    setSelectedReason(null);
+    onClose();
+  };
+
+  const handleSubmit = () => {
+    if (!selectedReason) return;
+    onSubmit(selectedReason);
+    setSelectedReason(null);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={handleClose}
+    >
+      <TouchableOpacity
+        style={reportModalStyles.overlay}
+        activeOpacity={1}
+        onPress={handleClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[reportModalStyles.sheet, { backgroundColor: theme.colors.background }]}
+        >
+          <View style={[reportModalStyles.handle, { backgroundColor: theme.colors.border }]} />
+          <Text style={[reportModalStyles.title, { color: theme.colors.text, fontSize: fontSize.sizes.subtitle }]}>
+            Signaler ce contenu
+          </Text>
+          <Text style={[reportModalStyles.subtitle, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.small }]}>
+            Pourquoi souhaitez-vous signaler ce contenu ?
+          </Text>
+
+          {REPORT_REASONS.map((reason) => (
+            <TouchableOpacity
+              key={reason.key}
+              style={[
+                reportModalStyles.reasonRow,
+                {
+                  backgroundColor: selectedReason === reason.key
+                    ? 'rgba(140, 233, 246, 0.15)'
+                    : theme.colors.navbar,
+                  borderColor: selectedReason === reason.key
+                    ? '#8CE9F6'
+                    : theme.colors.border,
+                }
+              ]}
+              onPress={() => setSelectedReason(reason.key)}
+            >
+              <Ionicons
+                name={selectedReason === reason.key ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={selectedReason === reason.key ? '#8CE9F6' : theme.colors.iconInactive}
+              />
+              <Text style={[reportModalStyles.reasonText, { color: theme.colors.text, fontSize: fontSize.sizes.body }]}>
+                {reason.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          <View style={reportModalStyles.buttons}>
+            <TouchableOpacity
+              style={[reportModalStyles.cancelButton, { borderColor: theme.colors.border }]}
+              onPress={handleClose}
+            >
+              <Text style={[reportModalStyles.cancelText, { color: theme.colors.textSecondary, fontSize: fontSize.sizes.body }]}>
+                Annuler
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                reportModalStyles.submitButton,
+                { backgroundColor: selectedReason ? '#FF6B6B' : theme.colors.border }
+              ]}
+              onPress={handleSubmit}
+              disabled={!selectedReason}
+            >
+              <Ionicons name="flag" size={16} color="#FFF" />
+              <Text style={[reportModalStyles.submitText, { fontSize: fontSize.sizes.body }]}>
+                Signaler
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const reportModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  title: {
+    fontFamily: 'Fredoka_600SemiBold',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontFamily: 'Fredoka_400Regular',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reasonText: {
+    fontFamily: 'Fredoka_400Regular',
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelText: {
+    fontFamily: 'Fredoka_500Medium',
+  },
+  submitButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  submitText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#FFF',
+  },
+});
 
 // Composant de post animé
-const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onOpenComments, onOpenLikes, getSeverityColor, navigation, isPremium }) => {
+const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onOpenComments, onOpenLikes, getSeverityColor, navigation, isPremium, onReport, reportedPosts }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -189,6 +365,20 @@ const AnimatedPostCard = ({ post, theme, fontSize, currentUser, onLike, onOpenCo
             </Text>
           </TouchableOpacity>
 
+          {/* Bouton signalement (masqué pour son propre post) */}
+          {!isOwnPost && (
+            <TouchableOpacity
+              style={[styles.actionButtonTopRight, { backgroundColor: theme.colors.navbar }]}
+              onPress={() => onReport({ contentType: 'post', contentId: post.id, postId: post.id })}
+              disabled={reportedPosts?.has(post.id)}
+            >
+              <Ionicons
+                name="flag-outline"
+                size={18}
+                color={reportedPosts?.has(post.id) ? '#FF6B6B' : theme.colors.iconInactive}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Header du post */}
@@ -366,6 +556,11 @@ export default function FeedScreen({ navigation }) {
   // État pour le modal des likes
   const [likesModalVisible, setLikesModalVisible] = useState(false);
   const [selectedPostForLikes, setSelectedPostForLikes] = useState(null);
+
+  // État pour le signalement
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportedPosts, setReportedPosts] = useState(new Set());
 
   // Filtres (sélection multiple)
   const [selectedLines, setSelectedLines] = useState([]);
@@ -575,6 +770,38 @@ export default function FeedScreen({ navigation }) {
     setSelectedPostForLikes(null);
   };
 
+  // Ouvrir le modal de signalement
+  const handleOpenReport = (target) => {
+    setReportTarget(target);
+    setReportModalVisible(true);
+  };
+
+  // Soumettre un signalement
+  const handleSubmitReport = async (reason) => {
+    if (!reportTarget || !currentUser) return;
+
+    setReportModalVisible(false);
+
+    const result = await submitReport({
+      contentType: reportTarget.contentType,
+      contentId: reportTarget.contentId,
+      postId: reportTarget.postId,
+      reason,
+      currentUser,
+    });
+
+    setReportTarget(null);
+
+    if (result.alreadyReported) {
+      Alert.alert('Déjà signalé', 'Vous avez déjà signalé ce contenu.');
+    } else if (result.success) {
+      setReportedPosts(prev => new Set([...prev, reportTarget.contentId]));
+      Alert.alert('Signalement envoyé', 'Merci, votre signalement a bien été pris en compte.');
+    } else {
+      Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
+    }
+  };
+
   // Gestionnaires de filtres rapides
   const handleQuickFilterLines = () => {
     if (quickFilterLines) {
@@ -616,6 +843,9 @@ export default function FeedScreen({ navigation }) {
 
   // Filtrer les posts
   const filteredPosts = posts.filter(post => {
+    // Masquer les posts signalés (hidden)
+    if (post.hidden === true) return false;
+
     // Filtre automatique par ville (basé sur les villes sélectionnées par l'utilisateur)
     const postCity = post.city || 'Paris'; // Par défaut Paris si non défini
     if (userCities.length > 0 && !userCities.includes(postCity)) return false;
@@ -732,6 +962,8 @@ export default function FeedScreen({ navigation }) {
       getSeverityColor={getSeverityColor}
       navigation={navigation}
       isPremium={isPremium}
+      onReport={handleOpenReport}
+      reportedPosts={reportedPosts}
     />
   );
 
@@ -1207,6 +1439,15 @@ export default function FeedScreen({ navigation }) {
         onClose={handleCloseLikes}
         likedBy={selectedPostForLikes?.likedBy}
         navigation={navigation}
+      />
+
+      {/* Modal de signalement */}
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => { setReportModalVisible(false); setReportTarget(null); }}
+        onSubmit={handleSubmitReport}
+        theme={theme}
+        fontSize={fontSize}
       />
 
       {/* Modal de publicité pour utilisateurs non-premium */}

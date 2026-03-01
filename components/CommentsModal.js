@@ -18,12 +18,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import { subscribeToComments, addComment, deleteComment } from '../services/commentService';
+import { submitReport } from '../services/reportService';
 import { getCurrentUser, getUserData } from '../services/authService';
 import PremiumBadge from './PremiumBadge';
 import { formatUserName } from '../utils/formatUserName';
 
+// Raisons de signalement pour les commentaires
+const COMMENT_REPORT_REASONS = [
+  { key: 'spam', label: 'Spam ou hors-sujet' },
+  { key: 'inappropriate', label: 'Contenu inapproprié' },
+  { key: 'dangerous', label: 'Contenu dangereux' },
+  { key: 'misinformation', label: 'Désinformation' },
+];
+
 // Composant pour un commentaire individuel
-const CommentItem = ({ comment, index, currentUser, theme, fontSize, handleUserPress, handleDeleteComment, formatDate }) => {
+const CommentItem = ({ comment, index, currentUser, theme, fontSize, handleUserPress, handleDeleteComment, formatDate, handleReportComment, reportedComments }) => {
   const isOwnComment = comment.userId === currentUser?.uid;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -116,6 +125,20 @@ const CommentItem = ({ comment, index, currentUser, theme, fontSize, handleUserP
                 styles.otherBubble,
                 { backgroundColor: theme.colors.navbar }
               ]}>
+                {/* Bouton signalement en haut à droite */}
+                <TouchableOpacity
+                  onPress={() => handleReportComment(comment)}
+                  style={styles.deleteButtonTopRight}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  disabled={reportedComments?.has(comment.id)}
+                >
+                  <Ionicons
+                    name="flag-outline"
+                    size={14}
+                    color={reportedComments?.has(comment.id) ? '#FF6B6B' : 'rgba(0,0,0,0.2)'}
+                  />
+                </TouchableOpacity>
+
                 {/* Message */}
                 <Text style={[styles.bubbleText, { color: theme.colors.text, fontSize: fontSize.sizes.body, fontFamily: 'Fredoka_400Regular' }]}>
                   {comment.text}
@@ -197,6 +220,7 @@ export default function CommentsModal({ visible, onClose, post, navigation }) {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [reportedComments, setReportedComments] = useState(new Set());
   const flatListRef = useRef(null);
 
   // Charger les données utilisateur
@@ -223,7 +247,7 @@ export default function CommentsModal({ visible, onClose, post, navigation }) {
 
     setLoading(true);
     const unsubscribe = subscribeToComments(post.id, (newComments) => {
-      setComments(newComments);
+      setComments(newComments.filter(c => !c.hidden));
       setLoading(false);
     });
 
@@ -294,6 +318,40 @@ export default function CommentsModal({ visible, onClose, post, navigation }) {
     );
   };
 
+  // Signaler un commentaire
+  const handleReportComment = (comment) => {
+    if (reportedComments.has(comment.id)) return;
+
+    Alert.alert(
+      'Signaler ce commentaire',
+      'Pourquoi souhaitez-vous signaler ce commentaire ?',
+      [
+        ...COMMENT_REPORT_REASONS.map((r) => ({
+          text: r.label,
+          onPress: async () => {
+            const result = await submitReport({
+              contentType: 'comment',
+              contentId: comment.id,
+              postId: post?.id || comment.postId,
+              reason: r.key,
+              currentUser,
+            });
+
+            if (result.alreadyReported) {
+              Alert.alert('Déjà signalé', 'Vous avez déjà signalé ce commentaire.');
+            } else if (result.success) {
+              setReportedComments(prev => new Set([...prev, comment.id]));
+              Alert.alert('Signalement envoyé', 'Merci, votre signalement a bien été pris en compte.');
+            } else {
+              Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
+            }
+          },
+        })),
+        { text: 'Annuler', style: 'cancel' },
+      ]
+    );
+  };
+
   // Formater la date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -334,6 +392,8 @@ export default function CommentsModal({ visible, onClose, post, navigation }) {
         handleUserPress={handleUserPress}
         handleDeleteComment={handleDeleteComment}
         formatDate={formatDate}
+        handleReportComment={handleReportComment}
+        reportedComments={reportedComments}
       />
     );
   };

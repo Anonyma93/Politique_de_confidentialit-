@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { getAuth } from 'firebase/auth';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -15,6 +15,8 @@ try {
 const PremiumContext = createContext();
 
 const REVENUECAT_API_KEY_IOS = 'appl_WlbpXfZwhjOxiQaXTxccqqoiehe';
+const REVENUECAT_API_KEY_ANDROID = 'goog_IGzZSALIJItcwqJOBGZltwSmHTg'; // goog_XXXXXXXXXXXX
+const REVENUECAT_API_KEY = Platform.OS === 'android' ? REVENUECAT_API_KEY_ANDROID : REVENUECAT_API_KEY_IOS;
 const ENTITLEMENT_ID = 'premium';
 
 export const PremiumProvider = ({ children }) => {
@@ -108,7 +110,7 @@ export const PremiumProvider = ({ children }) => {
       try {
         // Configurer RevenueCat (si pas déjà fait)
         try {
-          await Purchases.configure({ apiKey: REVENUECAT_API_KEY_IOS });
+          await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
           console.log('✅ RevenueCat configuré dans PremiumContext');
         } catch (configError) {
           // RevenueCat peut déjà être configuré dans subscriptionService

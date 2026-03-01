@@ -190,7 +190,7 @@ service cloud.firestore {
       // Créer une notification (automatique depuis l'app)
       allow create: if isAuthenticated()
         && request.resource.data.recipientId is string
-        && request.resource.data.type in ['like', 'comment', 'post_mention']
+        && request.resource.data.type in ['like', 'comment', 'post_mention', 'report']
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.read == false;
 
@@ -202,6 +202,26 @@ service cloud.firestore {
 
       // Pas de suppression
       allow delete: if false;
+    }
+
+    // ========================================
+    // REPORTS COLLECTION
+    // ========================================
+    match /reports/{reportId} {
+      // Lire ses propres signalements uniquement
+      allow read: if isAuthenticated()
+        && resource.data.reporterId == request.auth.uid;
+
+      // Créer un signalement si authentifié
+      allow create: if isAuthenticated()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.contentType in ['post', 'comment']
+        && request.resource.data.reason in ['spam', 'inappropriate', 'dangerous', 'misinformation']
+        && isValidString(request.resource.data.contentId, 1, 200)
+        && isValidString(request.resource.data.postId, 1, 200);
+
+      // Pas de mise à jour ni suppression
+      allow update, delete: if false;
     }
 
     // ========================================

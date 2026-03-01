@@ -8,6 +8,7 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onRequest } = require('firebase-functions/v2/https');
+const { FieldValue } = require('firebase-admin/firestore');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { Expo } = require('expo-server-sdk');
@@ -1085,6 +1086,89 @@ exports.managePremium = onRequest(
         success: false,
         error: error.message
       });
+    }
+  }
+);
+
+/**
+ * Fonction déclenchée : Traiter un nouveau signalement
+ *
+ * - Incrémente reportsCount sur le contenu signalé
+ * - Si reportsCount >= 3 → met hidden = true
+ * - Crée une notification pour l'admin
+ *
+ * IMPORTANT : Remplacer 'VOTRE_UID_ADMIN_ICI' par votre UID Firebase
+ */
+const REPORT_THRESHOLD = 3;
+const ADMIN_UID = 'TJ0EOaIIj3OD7cxcvT1yQZRJjN63';
+
+const REASON_LABELS = {
+  spam: 'Spam ou hors-sujet',
+  inappropriate: 'Contenu inapproprié',
+  dangerous: 'Contenu dangereux',
+  misinformation: 'Désinformation',
+};
+
+exports.onReportCreated = onDocumentCreated(
+  {
+    document: 'reports/{reportId}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    try {
+      const reportData = event.data.data();
+      const { contentType, contentId, postId, reason } = reportData;
+
+      console.log(`🚩 Nouveau signalement: ${contentType} ${contentId}, raison: ${reason}`);
+
+      // Déterminer la collection cible
+      const collectionName = contentType === 'post' ? 'posts' : 'comments';
+      const contentRef = db.collection(collectionName).doc(contentId);
+
+      // Incrémenter reportsCount avec transaction et vérifier le seuil
+      let newCount = 0;
+      await db.runTransaction(async (transaction) => {
+        const contentDoc = await transaction.get(contentRef);
+        if (!contentDoc.exists) {
+          console.log(`⚠️ Contenu introuvable: ${collectionName}/${contentId}`);
+          return;
+        }
+
+        const currentCount = contentDoc.data().reportsCount || 0;
+        newCount = currentCount + 1;
+
+        const updateData = { reportsCount: FieldValue.increment(1) };
+        if (newCount >= REPORT_THRESHOLD) {
+          updateData.hidden = true;
+          console.log(`🔒 Contenu masqué automatiquement: ${collectionName}/${contentId} (${newCount} signalements)`);
+        }
+
+        transaction.update(contentRef, updateData);
+      });
+
+      // Créer une notification admin
+      const reasonLabel = REASON_LABELS[reason] || reason;
+      const contentTypeLabel = contentType === 'post' ? 'post' : 'commentaire';
+
+      await db.collection('notifications').add({
+        recipientId: ADMIN_UID,
+        type: 'report',
+        contentType,
+        contentId,
+        postId,
+        reason,
+        reporterCount: newCount,
+        read: false,
+        createdAt: new Date().toISOString(),
+        message: `Nouveau signalement — ${reasonLabel} sur ${contentTypeLabel}`,
+      });
+
+      console.log(`✅ Signalement traité: ${contentType} ${contentId}, total: ${newCount}`);
+
+      return { success: true, reportsCount: newCount };
+    } catch (error) {
+      console.error('❌ Erreur lors du traitement du signalement:', error);
+      return { success: false, error: error.message };
     }
   }
 );
